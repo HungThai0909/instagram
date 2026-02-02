@@ -29,6 +29,7 @@ export const useAuthStore = create<AuthState>()(
           user,
           token,
           isAuthenticated: true,
+          isHydrated: true,
         });
       },
 

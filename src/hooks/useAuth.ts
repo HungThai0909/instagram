@@ -26,7 +26,7 @@ export function useAuth() {
 
       setAuth(res.user, res.token);
 
-      navigate("/home", { replace: true });
+      navigate("", { replace: true });
     } catch (error) {
       throw error;
     } finally {

@@ -102,6 +102,19 @@ export default function ProfilePage() {
     queryClient.invalidateQueries({ queryKey: ["user", profileUserId] });
   };
 
+  const handleDeleteProfilePicture = async () => {
+    try {
+      await axiosInstance.delete("/api/users/profile/picture");
+
+      toast.success("Xóa ảnh đại diện thành công");
+      queryClient.invalidateQueries({ queryKey: ["currentUserProfile"] });
+      queryClient.invalidateQueries({ queryKey: ["user", profileUserId] });
+    } catch (error) {
+      console.error(error);
+      toast.error("Xóa ảnh đại diện thất bại");
+    }
+  };
+
   const getMediaUrl = (path?: string | null) => {
     if (!path) return "";
     if (path.startsWith("http")) return path;
@@ -144,6 +157,14 @@ export default function ProfilePage() {
                   {profile.username[0]}
                 </span>
               </div>
+            )}
+            {isOwnProfile && profile.profilePicture && (
+              <button
+                onClick={handleDeleteProfilePicture}
+                className="text-center px-4 h-8 cursor-pointer w-full mt-4 bg-[#363636] hover:bg-[#262626] rounded-lg cursor-pointer"
+              >
+                Xóa ảnh đại diện
+              </button>
             )}
           </div>
 

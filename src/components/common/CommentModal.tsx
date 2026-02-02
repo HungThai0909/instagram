@@ -18,6 +18,7 @@ import { toast } from "sonner";
 import { useAuthStore } from "@/stores/authStore";
 import OptionsModal from "./OptionsModal";
 import EditCommentModal from "./EditCommentModal";
+import EditPostModal from "./EditPostModal";
 
 export default function CommentModal({
   post,
@@ -49,11 +50,13 @@ export default function CommentModal({
     isOwn: boolean;
   } | null>(null);
   const [postOptionsModal, setPostOptionsModal] = useState(false);
+  const [editPostModal, setEditPostModal] = useState(false);
   const [editingComment, setEditingComment] = useState<{
     commentId: string;
     content: string;
   } | null>(null);
   const [isSavingEdit, setIsSavingEdit] = useState(false);
+  const savingRef = useRef(false);
   const modalRef = useRef<HTMLDivElement>(null);
 
   const getMediaUrl = (path?: string) => {
@@ -130,6 +133,11 @@ export default function CommentModal({
       document.body.style.overflow = "hidden";
     } else {
       document.body.style.overflow = "unset";
+
+      setShowReplies({});
+      setReplies({});
+      setLoadingReplies({});
+
       setReplyingTo(null);
       setReplyText("");
       setCommentText("");
@@ -309,10 +317,13 @@ export default function CommentModal({
   };
 
   const handleSaveEditComment = async (newContent: string) => {
-    if (!editingComment) return;
+    if (!editingComment || savingRef.current) return;
+
+    savingRef.current = true;
 
     try {
       setIsSavingEdit(true);
+
       await axiosInstance.patch(
         `/api/posts/${post.id}/comments/${editingComment.commentId}`,
         { content: newContent },
@@ -328,11 +339,11 @@ export default function CommentModal({
 
       setEditingComment(null);
       toast.success("Đã cập nhật bình luận");
-    } catch (error) {
-      console.error("Failed to update comment:", error);
+    } catch {
       toast.error("Không thể cập nhật bình luận");
     } finally {
       setIsSavingEdit(false);
+      savingRef.current = false;
     }
   };
 
@@ -422,7 +433,42 @@ export default function CommentModal({
               <MoreHorizontal className="w-5 h-5" />
             </Button>
           </div>
+
           <div className="flex-1 overflow-y-auto p-4 space-y-4">
+            {post.content && (
+              <div className="flex gap-3">
+                <Link to={`/user/${post.user?.id}`}>
+                  {post.user?.avatar ? (
+                    <img
+                      src={post.user.avatar}
+                      alt={post.user.username}
+                      className="w-8 h-8 rounded-full object-cover flex-shrink-0"
+                    />
+                  ) : (
+                    <div className="w-8 h-8 rounded-full bg-white flex items-center justify-center flex-shrink-0">
+                      <span className="text-black text-xs font-semibold uppercase">
+                        {post.user?.username?.[0] || "U"}
+                      </span>
+                    </div>
+                  )}
+                </Link>
+
+                <div className="flex-1">
+                  <p className="text-sm">
+                    <Link
+                      to={`/user/${post.user?.id}`}
+                      className="font-semibold mr-2 hover:opacity-70"
+                    >
+                      {post.user?.username}
+                    </Link>
+                    <span>{post.content}</span>
+                  </p>
+                  <p className="text-xs text-gray-500 mt-1">
+                    {formatTime(post.created_at)}
+                  </p>
+                </div>
+              </div>
+            )}
             {isLoading ? (
               <div className="text-center text-gray-500 py-8">Đang tải...</div>
             ) : comments.length === 0 ? (
@@ -529,7 +575,7 @@ export default function CommentModal({
                             ? "Đang tải..."
                             : showReplies[comment._id]
                               ? "Ẩn câu trả lời"
-                              : `Xem câu trả lời (${comment.repliesCount})`}
+                              : "Xem câu trả lời"}
                         </button>
                       </div>
                     )}
@@ -723,6 +769,7 @@ export default function CommentModal({
             </form>
           </div>
         </div>
+
         <OptionsModal
           isOpen={postOptionsModal}
           onClose={() => setPostOptionsModal(false)}
@@ -731,8 +778,8 @@ export default function CommentModal({
           onEdit={
             isOwnPost
               ? () => {
-                  toast.info("Chức năng chỉnh sửa đang được phát triển");
                   setPostOptionsModal(false);
+                  setEditPostModal(true);
                 }
               : undefined
           }
@@ -771,11 +818,23 @@ export default function CommentModal({
           }}
           onReport={
             !commentOptionsModal?.isOwn
-              ? () => toast.info("Chức năng báo cáo đang được phát triển")
+              ? () => {
+                  toast.info("Chức năng báo cáo đang được phát triển");
+                  setCommentOptionsModal(null);
+                }
               : undefined
           }
         />
-
+        <EditPostModal
+          isOpen={editPostModal}
+          onClose={() => setEditPostModal(false)}
+          postId={post.id}
+          initialCaption={post.content || ""}
+          onSuccess={() => {
+            setEditPostModal(false);
+            toast.success("Đã cập nhật bài viết");
+          }}
+        />
         <EditCommentModal
           isOpen={!!editingComment}
           onClose={() => setEditingComment(null)}

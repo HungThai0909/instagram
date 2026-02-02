@@ -21,6 +21,8 @@ import { useAuthStore } from "@/stores/authStore";
 import { toast } from "sonner";
 import CommentModal from "./CommentModal";
 import OptionsModal from "./OptionsModal";
+import EditPostModal from "./EditPostModal";
+import { useQueryClient } from "@tanstack/react-query";
 
 interface PostCardProps {
   post: Post;
@@ -31,6 +33,8 @@ export default function PostCard({ post, onDelete }: PostCardProps) {
   const { user: currentUser } = useAuthStore();
   const [showComments, setShowComments] = useState(false);
   const [showOptions, setShowOptions] = useState(false);
+  const [editPostModal, setEditPostModal] = useState(false);
+  const queryClient = useQueryClient();
   const { mutate: likePost } = useLikePostMutation();
   const { mutate: unlikePost } = useUnlikePostMutation();
   const { mutate: savePost } = useSavePostMutation();
@@ -55,7 +59,12 @@ export default function PostCard({ post, onDelete }: PostCardProps) {
   };
 
   const handleEdit = () => {
-    toast.info("Chức năng chỉnh sửa đang được phát triển");
+    setShowOptions(false);
+    setEditPostModal(true);
+  };
+
+  const handleEditPostSuccess = () => {
+    queryClient.invalidateQueries({ queryKey: ["posts"] });
   };
 
   const handleReport = () => {
@@ -203,6 +212,7 @@ export default function PostCard({ post, onDelete }: PostCardProps) {
         onClose={() => setShowComments(false)}
         onLike={handleLike}
         onSave={handleSave}
+        onOpenPostOptions={() => setShowOptions(true)}
       />
 
       <OptionsModal
@@ -213,6 +223,14 @@ export default function PostCard({ post, onDelete }: PostCardProps) {
         onEdit={isOwnPost ? handleEdit : undefined}
         onDelete={() => onDelete?.(post.id)}
         onReport={!isOwnPost ? handleReport : undefined}
+      />
+
+      <EditPostModal
+        isOpen={editPostModal}
+        onClose={() => setEditPostModal(false)}
+        postId={post.id}
+        initialCaption={post.content || ""}
+        onSuccess={handleEditPostSuccess}
       />
     </>
   );
