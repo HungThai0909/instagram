@@ -93,38 +93,50 @@ export default function CommentModal({
     }
   };
 
-  const fetchReplies = async (commentId: string) => {
-    try {
-      setLoadingReplies((prev) => ({ ...prev, [commentId]: true }));
-      const res = await axiosInstance.get(
-        `/api/posts/${post.id}/comments/${commentId}/replies`,
-        { params: { limit: 5, offset: 0 } },
-      );
-      const repliesData = res.data?.data?.replies || [];
-      setReplies((prev) => ({
-        ...prev,
-        [commentId]: repliesData,
-      }));
-      setShowReplies((prev) => ({ ...prev, [commentId]: true }));
-    } catch (error) {
-      console.error("Failed to fetch replies:", error);
-      toast.error("Không thể tải câu trả lời");
-    } finally {
-      setLoadingReplies((prev) => ({ ...prev, [commentId]: false }));
-    }
-  };
+  const fetchReplies = async (commentId: string, limit: number) => {
+  try {
+    setLoadingReplies((prev) => ({ ...prev, [commentId]: true }));
+
+    const res = await axiosInstance.get(
+      `/api/posts/${post.id}/comments/${commentId}/replies`,
+      {
+        params: {
+          limit,
+          offset: 0,
+        },
+      },
+    );
+
+    const repliesData = res.data?.data?.replies || [];
+
+    setReplies((prev) => ({
+      ...prev,
+      [commentId]: repliesData,
+    }));
+
+    setShowReplies((prev) => ({ ...prev, [commentId]: true }));
+  } catch (error) {
+    console.error("Failed to fetch replies:", error);
+    toast.error("Không thể tải câu trả lời");
+  } finally {
+    setLoadingReplies((prev) => ({ ...prev, [commentId]: false }));
+  }
+};
 
   const toggleReplies = (commentId: string) => {
-    if (showReplies[commentId]) {
-      setShowReplies((prev) => ({ ...prev, [commentId]: false }));
+  if (showReplies[commentId]) {
+    setShowReplies((prev) => ({ ...prev, [commentId]: false }));
+  } else {
+    const comment = comments.find((c) => c._id === commentId);
+    const totalReplies = comment?.repliesCount || 0;
+
+    if (!replies[commentId]) {
+      fetchReplies(commentId, totalReplies);
     } else {
-      if (!replies[commentId]) {
-        fetchReplies(commentId);
-      } else {
-        setShowReplies((prev) => ({ ...prev, [commentId]: true }));
-      }
+      setShowReplies((prev) => ({ ...prev, [commentId]: true }));
     }
-  };
+  }
+};
 
   useEffect(() => {
     if (isOpen) {

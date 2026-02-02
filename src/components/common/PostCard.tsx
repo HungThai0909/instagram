@@ -23,6 +23,7 @@ import CommentModal from "./CommentModal";
 import OptionsModal from "./OptionsModal";
 import EditPostModal from "./EditPostModal";
 import { useQueryClient } from "@tanstack/react-query";
+import axiosInstance from "@/services/axios";
 
 interface PostCardProps {
   post: Post;
@@ -52,9 +53,35 @@ export default function PostCard({ post, onDelete }: PostCardProps) {
 
   const handleSave = () => {
     if (post.is_saved) {
-      unsavePost(post.id);
+      unsavePost(post.id, {
+        onSuccess: () => {
+          queryClient.invalidateQueries({ queryKey: ["userPosts"] });
+        },
+      });
     } else {
-      savePost(post.id);
+      savePost(post.id, {
+        onSuccess: () => {
+          queryClient.invalidateQueries({ queryKey: ["userPosts"] });
+        },
+      });
+    }
+  };
+
+  const handleDeletePost = async () => {
+    try {
+      await axiosInstance.delete(`/api/posts/${post.id}`);
+
+      toast.success("Đã xóa bài viết");
+
+      setShowOptions(false);
+
+      queryClient.invalidateQueries({ queryKey: ["posts"] });
+      queryClient.invalidateQueries({ queryKey: ["userPosts"] });
+
+      onDelete?.(post.id);
+    } catch (error) {
+      console.error("Failed to delete post:", error);
+      toast.error("Không thể xóa bài viết");
     }
   };
 
@@ -221,7 +248,7 @@ export default function PostCard({ post, onDelete }: PostCardProps) {
         isOwn={isOwnPost}
         type="post"
         onEdit={isOwnPost ? handleEdit : undefined}
-        onDelete={() => onDelete?.(post.id)}
+        onDelete={isOwnPost ? handleDeletePost : undefined}
         onReport={!isOwnPost ? handleReport : undefined}
       />
 

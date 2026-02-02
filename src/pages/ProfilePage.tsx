@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useParams, Link } from "react-router-dom";
+import { useParams } from "react-router-dom";
 import { Grid3x3, Bookmark, Play } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import axiosInstance from "@/services/axios";
@@ -10,8 +10,10 @@ import {
 import FollowListModal from "@/components/common/FollowListModal";
 import EditProfileModal from "@/components/common/EditProfileModal";
 import ChangePasswordModal from "@/components/common/ChangePasswordModal";
+import CommentModal from "@/components/common/CommentModal";
 import { toast } from "sonner";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import type { Post } from "@/types";
 
 type TabType = "posts" | "saved" | "video";
 
@@ -27,6 +29,9 @@ export default function ProfilePage() {
 
   const [editProfileModal, setEditProfileModal] = useState(false);
   const [changePasswordModal, setChangePasswordModal] = useState(false);
+  const [selectedPost, setSelectedPost] = useState<Post | null>(null);
+  const [showComments, setShowComments] = useState(false);
+  const [isLoadingPost, setIsLoadingPost] = useState(false);
 
   const { data: currentUser } = useCurrentUserProfileQuery();
 
@@ -89,7 +94,6 @@ export default function ProfilePage() {
         setFollowersCountLocal((prev) => prev + 1);
         toast.success("Đã theo dõi");
       }
-
       await refetchProfile();
     } catch (err) {
       console.error(err);
@@ -105,13 +109,96 @@ export default function ProfilePage() {
   const handleDeleteProfilePicture = async () => {
     try {
       await axiosInstance.delete("/api/users/profile/picture");
-
       toast.success("Xóa ảnh đại diện thành công");
       queryClient.invalidateQueries({ queryKey: ["currentUserProfile"] });
       queryClient.invalidateQueries({ queryKey: ["user", profileUserId] });
     } catch (error) {
       console.error(error);
       toast.error("Xóa ảnh đại diện thất bại");
+    }
+  };
+
+  const handlePostClick = async (postId: string) => {
+    try {
+      setIsLoadingPost(true);
+      const res = await axiosInstance.get(`/api/posts/${postId}`);
+      const fullPost = res.data.data;
+
+      const transformedPost: Post = {
+        id: fullPost._id,
+        user: {
+          id: fullPost.userId._id,
+          username: fullPost.userId.username,
+          avatar: fullPost.userId.profilePicture
+            ? getMediaUrl(fullPost.userId.profilePicture)
+            : null,
+        },
+        content: fullPost.caption || "",
+        images: fullPost.image ? [getMediaUrl(fullPost.image)] : [],
+        video: fullPost.video ? getMediaUrl(fullPost.video) : null,
+        like_count: fullPost.likes || 0,
+        comment_count: fullPost.comments || 0,
+        is_liked: fullPost.isLiked || false,
+        is_saved: fullPost.isSaved || false,
+        created_at: fullPost.createdAt,
+      };
+
+      setSelectedPost(transformedPost);
+      setShowComments(true);
+    } catch (error) {
+      console.error("Failed to fetch post:", error);
+      toast.error("Không thể tải bài viết");
+    } finally {
+      setIsLoadingPost(false);
+    }
+  };
+
+  const handleLikePost = async () => {
+    if (!selectedPost) return;
+
+    try {
+      if (selectedPost.is_liked) {
+        await axiosInstance.delete(`/api/posts/${selectedPost.id}/like`);
+      } else {
+        await axiosInstance.post(`/api/posts/${selectedPost.id}/like`);
+      }
+
+      setSelectedPost({
+        ...selectedPost,
+        is_liked: !selectedPost.is_liked,
+        like_count: selectedPost.is_liked
+          ? selectedPost.like_count - 1
+          : selectedPost.like_count + 1,
+      });
+
+      queryClient.invalidateQueries({
+        queryKey: ["userPosts", profileUserId, activeTab],
+      });
+    } catch (error) {
+      console.error("Failed to like post:", error);
+    }
+  };
+
+  const handleSavePost = async () => {
+    if (!selectedPost) return;
+
+    try {
+      if (selectedPost.is_saved) {
+        await axiosInstance.delete(`/api/posts/${selectedPost.id}/save`);
+      } else {
+        await axiosInstance.post(`/api/posts/${selectedPost.id}/save`);
+      }
+
+      setSelectedPost({
+        ...selectedPost,
+        is_saved: !selectedPost.is_saved,
+      });
+
+      queryClient.invalidateQueries({
+        queryKey: ["userPosts", profileUserId, activeTab],
+      });
+    } catch (error) {
+      console.error("Failed to save post:", error);
     }
   };
 
@@ -161,7 +248,7 @@ export default function ProfilePage() {
             {isOwnProfile && profile.profilePicture && (
               <button
                 onClick={handleDeleteProfilePicture}
-                className="text-center px-4 h-8 cursor-pointer w-full mt-4 bg-[#363636] hover:bg-[#262626] rounded-lg cursor-pointer"
+                className="text-center px-4 h-8 cursor-pointer w-full mt-4 bg-[#363636] hover:bg-[#262626] rounded-lg text-sm"
               >
                 Xóa ảnh đại diện
               </button>
@@ -311,9 +398,9 @@ export default function ProfilePage() {
           ) : (
             <div className="grid grid-cols-3 gap-1">
               {posts.map((post: any) => (
-                <Link
+                <div
                   key={post._id}
-                  to={`/post/${post._id}`}
+                  onClick={() => handlePostClick(post._id)}
                   className="relative aspect-square bg-gray-800 group cursor-pointer"
                 >
                   {post.mediaType === "video" ? (
@@ -358,7 +445,13 @@ export default function ProfilePage() {
                       <span>{post.comments}</span>
                     </div>
                   </div>
-                </Link>
+
+                  {isLoadingPost && (
+                    <div className="absolute inset-0 bg-black/60 flex items-center justify-center">
+                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white"></div>
+                    </div>
+                  )}
+                </div>
               ))}
             </div>
           )}
@@ -393,6 +486,19 @@ export default function ProfilePage() {
         isOpen={changePasswordModal}
         onClose={() => setChangePasswordModal(false)}
       />
+
+      {selectedPost && (
+        <CommentModal
+          post={selectedPost}
+          isOpen={showComments}
+          onClose={() => {
+            setShowComments(false);
+            setSelectedPost(null);
+          }}
+          onLike={handleLikePost}
+          onSave={handleSavePost}
+        />
+      )}
     </div>
   );
 }
