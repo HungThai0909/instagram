@@ -14,6 +14,7 @@ import CommentModal from "@/components/common/CommentModal";
 import { toast } from "sonner";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { Post } from "@/types";
+import { useNavigate } from "react-router-dom";
 
 type TabType = "posts" | "saved" | "video";
 
@@ -49,6 +50,7 @@ export default function ProfilePage() {
 
   const [isFollowingLocal, setIsFollowingLocal] = useState(false);
   const [followersCountLocal, setFollowersCountLocal] = useState(0);
+  const navigate = useNavigate();
 
   useEffect(() => {
     if (profile) {
@@ -325,6 +327,27 @@ export default function ProfilePage() {
                 <Button
                   variant="secondary"
                   className="bg-[#363636] hover:bg-[#262626] text-white font-semibold px-4 h-8 rounded-lg flex-1 cursor-pointer"
+                  onClick={async () => {
+                    try {
+                      const res = await axiosInstance.post(
+                        "/api/messages/conversations",
+                        {
+                          userId: profileUserId,
+                        },
+                      );
+
+                      const conversation = res.data.data;
+
+                      navigate("/chat", {
+                        state: {
+                          conversationId: conversation._id,
+                        },
+                      });
+                    } catch (err) {
+                      console.error(err);
+                      toast.error("Không thể mở cuộc trò chuyện");
+                    }
+                  }}
                 >
                   Gửi tin nhắn
                 </Button>

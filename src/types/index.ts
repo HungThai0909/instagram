@@ -82,6 +82,7 @@ export interface Post {
   user?: User;
   content: string;
   images?: string[];
+  video?: string;
   like_count: number;
   comment_count: number;
   created_at: string;
