@@ -163,11 +163,14 @@ export default function EditProfileModal({
   return (
     <div
       className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60"
-      onClick={onClose}
+      onMouseDown={(e) => {
+    if (e.target !== e.currentTarget) return;
+    onClose();
+  }}
     >
       <div
         className="bg-[#262626] rounded-xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col"
-        onClick={(e) => e.stopPropagation()}
+        onMouseDown={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between p-4 border-b border-gray-700">
           <h2 className="text-lg font-semibold flex-1 text-center">

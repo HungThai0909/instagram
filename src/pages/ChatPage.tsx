@@ -6,6 +6,7 @@ import axiosInstance from "@/services/axios";
 import { useAuthStore } from "@/stores/authStore";
 import { toast } from "sonner";
 import { useLocation } from "react-router-dom";
+import NewMessageModal from "@/components/common/NewMessageModal";
 
 interface Participant {
   _id: string;
@@ -93,7 +94,7 @@ function Avatar({ user, size = 44 }: { user: Participant; size?: number }) {
 export default function ChatPage() {
   const { user: currentUser } = useAuthStore();
   const messagesEndRef = useRef<HTMLDivElement>(null);
-
+  const [newMessageModal, setNewMessageModal] = useState(false);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [selectedConv, setSelectedConv] = useState<Conversation | null>(null);
   const [messages, setMessages] = useState<MessageData[]>([]);
@@ -157,6 +158,21 @@ export default function ChatPage() {
     }
   }, [initialConvId, conversations]);
 
+  const handleConversationCreated = async (conversationId: string) => {
+    await fetchConversations();
+
+    const conv = conversations.find((c) => c._id === conversationId);
+    if (conv) {
+      setSelectedConv(conv);
+    } else {
+      const res = await axiosInstance.get("/api/messages/conversations");
+      const allConvs = res.data.data.conversations || [];
+      setConversations(allConvs);
+      const found = allConvs.find((c: any) => c._id === conversationId);
+      if (found) setSelectedConv(found);
+    }
+  };
+
   const handleSend = async () => {
     if (!input.trim() || !selectedConv || isSending) return;
 
@@ -195,7 +211,10 @@ export default function ChatPage() {
           <h2 className="text-xl font-semibold">
             {currentUser?.username || "Tin nhắn"}
           </h2>
-          <button className="text-white hover:opacity-70 cursor-pointer">
+          <button
+            onClick={() => setNewMessageModal(true)}
+            className="text-white hover:opacity-70 cursor-pointer"
+          >
             <Edit2 className="w-5 h-5" />
           </button>
         </div>
@@ -383,12 +402,23 @@ export default function ChatPage() {
               </div>
               <p className="text-lg font-semibold">Tin nhắn của bạn</p>
               <p className="text-sm text-gray-500 text-center max-w-xs">
-                Gửi tin nhắn riêng hoặc chọn một cuộc trò chuyện để xem
+                Gửi ảnh và tin nhắn riêng tư cho bạn bè hoặc nhóm
               </p>
+              <button
+                onClick={() => setNewMessageModal(true)}
+                className="mt-2 bg-[#0095f6] hover:bg-[#1877f2] text-white text-sm font-semibold px-4 py-2 rounded-lg cursor-pointer"
+              >
+                Gửi tin nhắn
+              </button>
             </div>
           </div>
         )}
       </div>
+      <NewMessageModal
+        isOpen={newMessageModal}
+        onClose={() => setNewMessageModal(false)}
+        onConversationCreated={handleConversationCreated}
+      />
     </div>
   );
 }

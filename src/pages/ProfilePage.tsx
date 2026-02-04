@@ -204,6 +204,16 @@ export default function ProfilePage() {
     }
   };
 
+  const handleCloseFollowListModal = async () => {
+    setFollowListModal({ ...followListModal, isOpen: false });
+
+    const { data } = await refetchProfile();
+    if (data) {
+      setIsFollowingLocal(!!data.isFollowing);
+      setFollowersCountLocal(data.followersCount || 0);
+    }
+  };
+
   const getMediaUrl = (path?: string | null) => {
     if (!path) return "";
     if (path.startsWith("http")) return path;
@@ -483,9 +493,7 @@ export default function ProfilePage() {
 
       <FollowListModal
         isOpen={followListModal.isOpen}
-        onClose={() =>
-          setFollowListModal({ ...followListModal, isOpen: false })
-        }
+        onClose={handleCloseFollowListModal}
         userId={profileUserId}
         type={followListModal.type}
         isOwnProfile={isOwnProfile}

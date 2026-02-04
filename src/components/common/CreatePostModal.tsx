@@ -137,11 +137,14 @@ export default function CreatePostModal({
   return (
     <div
       className="fixed inset-0 z-[70] flex items-center justify-center bg-black/80"
-      onClick={!isPosting ? onClose : undefined}
+      onMouseDown={(e) => {
+        if (e.target !== e.currentTarget) return;
+        if (!isPosting) onClose();
+      }}
     >
       <div
         className="bg-[#262626] rounded-xl w-full max-w-3xl overflow-hidden flex flex-col"
-        onClick={(e) => e.stopPropagation()}
+        onMouseDown={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between p-4 border-b border-gray-700">
           {step === "preview" && (

@@ -71,11 +71,14 @@ export default function EditPostModal({
   return (
     <div
       className="fixed inset-0 z-[80] flex items-center justify-center bg-black/80"
-      onClick={!isSaving ? onClose : undefined}
+      onMouseDown={(e) => {
+        if (e.target !== e.currentTarget) return;
+        if (!isSaving) onClose();
+      }}
     >
       <div
         className="bg-[#262626] rounded-xl w-full max-w-md overflow-hidden flex flex-col"
-        onClick={(e) => e.stopPropagation()}
+        onMouseDown={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between p-4 border-b border-gray-700">
           <h2 className="text-base font-semibold flex-1 text-center">

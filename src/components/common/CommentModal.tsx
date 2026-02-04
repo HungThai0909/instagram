@@ -94,49 +94,49 @@ export default function CommentModal({
   };
 
   const fetchReplies = async (commentId: string, limit: number) => {
-  try {
-    setLoadingReplies((prev) => ({ ...prev, [commentId]: true }));
+    try {
+      setLoadingReplies((prev) => ({ ...prev, [commentId]: true }));
 
-    const res = await axiosInstance.get(
-      `/api/posts/${post.id}/comments/${commentId}/replies`,
-      {
-        params: {
-          limit,
-          offset: 0,
+      const res = await axiosInstance.get(
+        `/api/posts/${post.id}/comments/${commentId}/replies`,
+        {
+          params: {
+            limit,
+            offset: 0,
+          },
         },
-      },
-    );
+      );
 
-    const repliesData = res.data?.data?.replies || [];
+      const repliesData = res.data?.data?.replies || [];
 
-    setReplies((prev) => ({
-      ...prev,
-      [commentId]: repliesData,
-    }));
+      setReplies((prev) => ({
+        ...prev,
+        [commentId]: repliesData,
+      }));
 
-    setShowReplies((prev) => ({ ...prev, [commentId]: true }));
-  } catch (error) {
-    console.error("Failed to fetch replies:", error);
-    toast.error("Không thể tải câu trả lời");
-  } finally {
-    setLoadingReplies((prev) => ({ ...prev, [commentId]: false }));
-  }
-};
+      setShowReplies((prev) => ({ ...prev, [commentId]: true }));
+    } catch (error) {
+      console.error("Failed to fetch replies:", error);
+      toast.error("Không thể tải câu trả lời");
+    } finally {
+      setLoadingReplies((prev) => ({ ...prev, [commentId]: false }));
+    }
+  };
 
   const toggleReplies = (commentId: string) => {
-  if (showReplies[commentId]) {
-    setShowReplies((prev) => ({ ...prev, [commentId]: false }));
-  } else {
-    const comment = comments.find((c) => c._id === commentId);
-    const totalReplies = comment?.repliesCount || 0;
-
-    if (!replies[commentId]) {
-      fetchReplies(commentId, totalReplies);
+    if (showReplies[commentId]) {
+      setShowReplies((prev) => ({ ...prev, [commentId]: false }));
     } else {
-      setShowReplies((prev) => ({ ...prev, [commentId]: true }));
+      const comment = comments.find((c) => c._id === commentId);
+      const totalReplies = comment?.repliesCount || 0;
+
+      if (!replies[commentId]) {
+        fetchReplies(commentId, totalReplies);
+      } else {
+        setShowReplies((prev) => ({ ...prev, [commentId]: true }));
+      }
     }
-  }
-};
+  };
 
   useEffect(() => {
     if (isOpen) {
@@ -377,7 +377,10 @@ export default function CommentModal({
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/80"
-      onClick={onClose}
+      onMouseDown={(e) => {
+        if (e.target !== e.currentTarget) return;
+        onClose();
+      }}
     >
       <button
         onClick={onClose}
@@ -389,7 +392,7 @@ export default function CommentModal({
       <div
         ref={modalRef}
         className="relative w-full max-w-5xl h-[90vh] bg-black flex rounded-lg overflow-hidden"
-        onClick={(e) => e.stopPropagation()}
+        onMouseDown={(e) => e.stopPropagation()}
       >
         <div className="flex-1 bg-black flex items-center justify-center">
           {post.images && post.images.length > 0 ? (
@@ -496,7 +499,7 @@ export default function CommentModal({
                     onMouseLeave={() => setHoveredCommentId(null)}
                   >
                     <div className="flex gap-3">
-                      <Link to={`/user/${post.user?.id}`}>
+                      <Link to={`/user/${comment.userId._id}`}>
                         {comment.userId.profilePicture ? (
                           <img
                             src={getMediaUrl(comment.userId.profilePicture)}
@@ -514,7 +517,7 @@ export default function CommentModal({
                       <div className="flex-1">
                         <p className="text-sm">
                           <Link
-                            to={`/user/${post.user?.id}`}
+                            to={`/user/${comment.userId._id}`}
                             className="font-semibold mr-2 hover:opacity-70"
                           >
                             {comment.userId.username}
@@ -604,7 +607,7 @@ export default function CommentModal({
                           onMouseLeave={() => setHoveredCommentId(null)}
                         >
                           <div className="flex gap-3">
-                            <Link to={`/user/${post.user?.id}`}>
+                            <Link to={`/user/${reply.userId._id}`}>
                               {reply.userId.profilePicture ? (
                                 <img
                                   src={getMediaUrl(reply.userId.profilePicture)}
@@ -622,7 +625,7 @@ export default function CommentModal({
                             <div className="flex-1">
                               <p className="text-sm">
                                 <Link
-                                  to={`/user/${post.user?.id}`}
+                                  to={`/user/${reply.userId._id}`}
                                   className="font-semibold mr-2 hover:opacity-70"
                                 >
                                   {reply.userId.username}
@@ -646,21 +649,6 @@ export default function CommentModal({
                                   className="hover:text-gray-400 font-semibold cursor-pointer"
                                 >
                                   Trả lời
-                                </button>
-                                <button
-                                  onClick={() =>
-                                    handleOpenCommentOptions(
-                                      reply._id,
-                                      reply.userId._id === currentUser?.id,
-                                    )
-                                  }
-                                  className={`text-gray-500 hover:text-white cursor-pointer transition-opacity ${
-                                    hoveredCommentId === `reply-${reply._id}`
-                                      ? "opacity-100"
-                                      : "opacity-0"
-                                  }`}
-                                >
-                                  <MoreHorizontal className="w-4 h-4" />
                                 </button>
                               </div>
                             </div>
@@ -721,11 +709,9 @@ export default function CommentModal({
               </button>
             </div>
 
-            {post.like_count > 0 && (
-              <p className="font-semibold text-sm mb-2">
-                {post.like_count} lượt thích
-              </p>
-            )}
+            <p className="font-semibold text-sm mb-2">
+              {post.like_count} lượt thích
+            </p>
 
             <p className="text-xs text-gray-500 mb-3">
               {formatTime(post.created_at)}

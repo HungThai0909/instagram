@@ -198,25 +198,21 @@ export default function PostCard({ post, onDelete }: PostCardProps) {
                 </span>
               </button>
 
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8 p-0 hover:bg-transparent hover:opacity-70 cursor-pointer"
+              <button
+                className="hover:opacity-70 cursor-pointer"
               >
                 <Send className="w-7 h-7" />
-              </Button>
+              </button>
             </div>
 
-            <Button
-              variant="ghost"
-              size="icon"
+            <button
               onClick={handleSave}
-              className="h-8 w-8 p-0 hover:bg-transparent hover:opacity-70 cursor-pointer"
+              className="hover:opacity-70 cursor-pointer"
             >
               <Bookmark
                 className={`w-6 h-6 ${post.is_saved ? "fill-white" : ""}`}
               />
-            </Button>
+            </button>
           </div>
 
           {post.content && (

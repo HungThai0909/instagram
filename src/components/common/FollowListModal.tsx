@@ -9,6 +9,7 @@ import {
   useCurrentUserProfileQuery,
 } from "@/hooks/useUserQuery";
 import { toast } from "sonner";
+import { useQueryClient } from "@tanstack/react-query";
 
 interface User {
   _id: string;
@@ -36,10 +37,12 @@ export default function FollowListModal({
 }: FollowListModalProps) {
   const [users, setUsers] = useState<User[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+
   const [followingState, setFollowingState] = useState<Record<string, boolean>>(
     {},
   );
 
+  const queryClient = useQueryClient();
   const { data: currentUser } = useCurrentUserProfileQuery();
 
   const { mutate: followUser, isPending: isFollowing } =
@@ -56,34 +59,35 @@ export default function FollowListModal({
   const fetchUsers = async () => {
     try {
       setIsLoading(true);
+
       const endpoint =
         type === "followers"
           ? `/api/follow/${userId}/followers`
           : `/api/follow/${userId}/following`;
 
       const res = await axiosInstance.get(endpoint);
-      const userList =
+
+      const list =
         type === "followers"
           ? res.data.data.followers
           : res.data.data.following;
 
-      setUsers(userList);
+      setUsers(list);
 
       setFollowingState((prev) => {
-        const state: Record<string, boolean> = {};
+        const nextState: Record<string, boolean> = { ...prev };
 
-        userList.forEach((u: User) => {
-          state[u._id] =
-            prev[u._id] ??
-            (type === "following" && isOwnProfile
-              ? true
-              : (u.isFollowing ?? false));
+        list.forEach((u: User) => {
+          if (prev[u._id] !== undefined) return;
+
+          nextState[u._id] =
+            type === "following" && isOwnProfile ? true : !!u.isFollowing;
         });
 
-        return state;
+        return nextState;
       });
     } catch (error) {
-      console.error("Failed to fetch users:", error);
+      console.error(error);
       toast.error("Không thể tải danh sách");
     } finally {
       setIsLoading(false);
@@ -91,12 +95,10 @@ export default function FollowListModal({
   };
 
   useEffect(() => {
-    if (isOpen) {
-      fetchUsers();
-      document.body.style.overflow = "hidden";
-    } else {
-      document.body.style.overflow = "unset";
-    }
+    if (!isOpen) return;
+
+    fetchUsers();
+    document.body.style.overflow = "hidden";
 
     return () => {
       document.body.style.overflow = "unset";
@@ -120,14 +122,18 @@ export default function FollowListModal({
     if (isCurrentlyFollowing) {
       unfollowUser(targetUserId, {
         onSuccess: () => {
+          setFollowingState((prev) => ({
+            ...prev,
+            [targetUserId]: false,
+          }));
+
           if (type === "following" && isOwnProfile) {
             setUsers((prev) => prev.filter((u) => u._id !== targetUserId));
-          } else {
-            setFollowingState((prev) => ({
-              ...prev,
-              [targetUserId]: false,
-            }));
           }
+
+          queryClient.invalidateQueries({ queryKey: ["followers", userId] });
+          queryClient.invalidateQueries({ queryKey: ["following", userId] });
+
           toast.success(`Đã bỏ theo dõi ${username}`);
         },
         onError: () => {
@@ -141,6 +147,10 @@ export default function FollowListModal({
             ...prev,
             [targetUserId]: true,
           }));
+
+          queryClient.invalidateQueries({ queryKey: ["followers", userId] });
+          queryClient.invalidateQueries({ queryKey: ["following", userId] });
+
           toast.success(`Đã theo dõi ${username}`);
         },
         onError: () => {
@@ -174,10 +184,11 @@ export default function FollowListModal({
             <X className="w-6 h-6" />
           </button>
         </div>
+
         <div className="flex-1 overflow-y-auto">
           {isLoading ? (
             <div className="flex items-center justify-center py-12">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white"></div>
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white" />
             </div>
           ) : users.length === 0 ? (
             <div className="text-center py-12 text-gray-400">
@@ -217,6 +228,7 @@ export default function FollowListModal({
                     {user.fullName}
                   </p>
                 </div>
+
                 {user._id !== currentUser?._id && (
                   <Button
                     onClick={() => handleToggleFollow(user._id, user.username)}
