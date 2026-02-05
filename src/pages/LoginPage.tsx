@@ -1,8 +1,8 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -19,14 +19,23 @@ type LoginInput = z.infer<typeof loginSchema>;
 export default function LoginPage() {
   const { login, isLoading } = useAuth();
   const [showPassword, setShowPassword] = useState(false);
+  const location = useLocation();
 
   const {
     register,
     handleSubmit,
+    setValue,
     formState: { errors },
   } = useForm<LoginInput>({
     resolver: zodResolver(loginSchema),
   });
+
+  useEffect(() => {
+    if (location.state?.verified && location.state?.email) {
+      toast.success("Email đã được xác thực, bạn có thể đăng nhập ");
+      setValue("email", location.state.email);
+    }
+  }, [location.state, setValue]);
 
   const onSubmit = async (data: LoginInput) => {
     try {

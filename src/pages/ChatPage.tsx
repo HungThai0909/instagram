@@ -7,6 +7,7 @@ import { useAuthStore } from "@/stores/authStore";
 import { toast } from "sonner";
 import { useLocation } from "react-router-dom";
 import NewMessageModal from "@/components/common/NewMessageModal";
+import io, { Socket } from "socket.io-client";
 
 interface Participant {
   _id: string;
@@ -118,10 +119,15 @@ function Avatar({ user, size = 44 }: { user: Participant; size?: number }) {
 
 export default function ChatPage() {
   const { user: currentUser } = useAuthStore();
+  const currentUserId =
+    (currentUser as any)?._id ?? (currentUser as any)?.id ?? "";
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const didFetchConvsRef = useRef(false);
   const markedAsReadRef = useRef<Set<string>>(new Set());
+  const socketRef = useRef<Socket | null>(null);
+  const selectedConvRef = useRef<Conversation | null>(null);
+  const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const location = useLocation();
   const initialConvId = location.state?.conversationId;
 
@@ -136,6 +142,100 @@ export default function ChatPage() {
   const [isLoadingMsgs, setIsLoadingMsgs] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [totalUnreadCount, setTotalUnreadCount] = useState(0);
+  const [isTyping, setIsTyping] = useState(false);
+
+  useEffect(() => {
+    selectedConvRef.current = selectedConv;
+  }, [selectedConv]);
+
+  useEffect(() => {
+    const token = localStorage.getItem("auth_token");
+    if (!token) return;
+
+    const socket = io("https://instagram.f8team.dev", {
+      auth: { token },
+    });
+
+    socket.on("connect", () => {
+      console.log("Connected to chat server");
+    });
+
+    socket.on("disconnect", () => {
+      console.log("Disconnected from chat server");
+    });
+
+    socket.on("new_message", (message: MessageData) => {
+      const currentConv = selectedConvRef.current;
+
+      if (currentConv && message.conversationId === currentConv._id) {
+        setMessages((prev) => {
+          if (prev.some((m) => m._id === message._id)) return prev;
+          return [...prev, message];
+        });
+      }
+
+      fetchConversations();
+      fetchUnreadCount();
+    });
+
+    socket.on("user_typing", ({ conversationId, userId }) => {
+      const currentConv = selectedConvRef.current;
+
+      if (
+        currentConv &&
+        conversationId === currentConv._id &&
+        userId !== currentUserId
+      ) {
+        setIsTyping(true);
+      }
+    });
+
+    socket.on("user_stop_typing", ({ conversationId, userId }) => {
+      const currentConv = selectedConvRef.current;
+
+      if (
+        currentConv &&
+        conversationId === currentConv._id &&
+        userId !== currentUserId
+      ) {
+        setIsTyping(false);
+      }
+    });
+
+    socketRef.current = socket;
+
+    return () => {
+      socket.disconnect();
+    };
+  }, []);
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setInput(value);
+
+    if (!socketRef.current || !selectedConv) return;
+
+    const otherUser = getOtherParticipant(selectedConv, currentUserId);
+    if (!otherUser) return;
+
+    socketRef.current.emit("typing", {
+      conversationId: selectedConv._id,
+      recipientId: otherUser._id,
+    });
+
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+    }
+
+    typingTimeoutRef.current = setTimeout(() => {
+      if (socketRef.current) {
+        socketRef.current.emit("stop_typing", {
+          conversationId: selectedConv._id,
+          recipientId: otherUser._id,
+        });
+      }
+    }, 2000);
+  };
 
   const fetchUnreadCount = useCallback(async () => {
     try {
@@ -184,8 +284,8 @@ export default function ChatPage() {
   useEffect(() => {
     if (selectedConv) {
       fetchMessages(selectedConv._id);
-
       markedAsReadRef.current.clear();
+      setIsTyping(false);
     }
   }, [selectedConv, fetchMessages]);
 
@@ -195,7 +295,7 @@ export default function ChatPage() {
     const unreadMessages = messages.filter(
       (msg) =>
         !msg.isRead &&
-        msg.senderId._id !== currentUser.id &&
+        msg.senderId._id !== currentUserId &&
         !markedAsReadRef.current.has(msg._id),
     );
 
@@ -258,8 +358,15 @@ export default function ChatPage() {
   const handleSend = async () => {
     if ((!input.trim() && !selectedImage) || !selectedConv || isSending) return;
 
-    const otherUser = getOtherParticipant(selectedConv, currentUser?.id || "");
+    const otherUser = getOtherParticipant(selectedConv, currentUserId);
     if (!otherUser) return;
+
+    if (socketRef.current) {
+      socketRef.current.emit("stop_typing", {
+        conversationId: selectedConv._id,
+        recipientId: otherUser._id,
+      });
+    }
 
     try {
       setIsSending(true);
@@ -344,7 +451,7 @@ export default function ChatPage() {
   };
 
   const otherUser = selectedConv
-    ? getOtherParticipant(selectedConv, currentUser?.id || "")
+    ? getOtherParticipant(selectedConv, currentUserId)
     : null;
 
   return (
@@ -392,7 +499,7 @@ export default function ChatPage() {
             </p>
           ) : (
             conversations.map((conv) => {
-              const other = getOtherParticipant(conv, currentUser?.id || "");
+              const other = getOtherParticipant(conv, currentUserId);
               if (!other) return null;
               const isSelected = selectedConv?._id === conv._id;
               const lastText =
@@ -440,7 +547,9 @@ export default function ChatPage() {
                 <Avatar user={otherUser} size={40} />
                 <div>
                   <p className="text-sm font-semibold">{otherUser.fullName}</p>
-                  <p className="text-xs text-gray-500">{otherUser.username}</p>
+                  <p className="text-xs text-gray-500">
+                    {isTyping ? "Đang nhập..." : otherUser.username}
+                  </p>
                 </div>
               </div>
               <div className="flex items-center gap-4 text-gray-400">
@@ -482,7 +591,7 @@ export default function ChatPage() {
 
                       <div className="space-y-3">
                         {group.messages.map((msg) => {
-                          const isOwn = msg.senderId._id === currentUser?.id;
+                          const isOwn = msg.senderId._id === currentUserId;
                           return (
                             <div
                               key={msg._id}
@@ -566,7 +675,7 @@ export default function ChatPage() {
                 <input
                   type="text"
                   value={input}
-                  onChange={(e) => setInput(e.target.value)}
+                  onChange={handleInputChange}
                   onKeyDown={(e) => {
                     if (e.key === "Enter" && !e.shiftKey) {
                       e.preventDefault();

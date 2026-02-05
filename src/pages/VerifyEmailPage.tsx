@@ -1,4 +1,3 @@
-
 import { useEffect, useState } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { authService } from "@/services/authService";
@@ -13,24 +12,34 @@ export default function VerifyEmailPage() {
   const [isVerifying, setIsVerifying] = useState(false);
 
   useEffect(() => {
-    const token = searchParams.get("token");
-    if (token) {
-      verifyWithToken(token);
-    }
-  }, [searchParams]);
+  const rawToken = searchParams.get("token");
+
+  if (rawToken) {
+    const decodedToken = decodeURIComponent(rawToken);
+    verifyWithToken(decodedToken);
+  }
+}, [searchParams]);
 
   const verifyWithToken = async (token: string) => {
-    setIsVerifying(true);
-    try {
-      await authService.verifyEmailWithToken(token);
-      toast.success("Email đã được xác thực thành công! Vui lòng đăng nhập lại.");
-      navigate("/login", { replace: true });
-    } catch (error: any) {
-      toast.error(error.response?.data?.message || "Xác thực email thất bại");
-    } finally {
-      setIsVerifying(false);
-    }
-  };
+  setIsVerifying(true);
+  try {
+    await authService.verifyEmailWithToken(token);
+
+    toast.success("Email đã được xác thực! Bạn có thể đăng nhập");
+
+    navigate("/login", {
+      replace: true,
+      state: {
+        verified: true,
+        email, 
+      },
+    });
+  } catch (error: any) {
+    toast.error(error.response?.data?.message || "Xác thực email thất bại");
+  } finally {
+    setIsVerifying(false);
+  }
+};
 
   const handleResend = async () => {
     if (!email) {

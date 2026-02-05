@@ -3,30 +3,34 @@ import { useNavigate } from "react-router-dom";
 import { useAuthStore } from "@/stores/authStore";
 import { authService } from "@/services/authService";
 import type { LoginRequest } from "@/types";
+import { toast } from "sonner";
 
 export function useAuth() {
   const navigate = useNavigate();
   const setAuth = useAuthStore((s) => s.setAuth);
   const logoutStore = useAuthStore((s) => s.logout);
+
   const user = useAuthStore((s) => s.user);
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+
   const [isLoading, setIsLoading] = useState(false);
 
   const login = async (data: LoginRequest) => {
     setIsLoading(true);
     try {
-      const res = await authService.login(data);
+      const { user, accessToken, refreshToken } = await authService.login(data);
 
-      if (!res.token || !res.user) {
-        throw new Error("Thông tin đăng nhập không hợp lệ");
+      if (!accessToken || !user) {
+        throw new Error("Invalid login response");
       }
 
-      localStorage.setItem("auth_token", res.token);
-      localStorage.setItem("current_user", JSON.stringify(res.user));
+      localStorage.setItem("auth_token", accessToken);
+      localStorage.setItem("refresh_token", refreshToken);
+      localStorage.setItem("current_user", JSON.stringify(user));
 
-      setAuth(res.user, res.token);
+      setAuth(user, accessToken);
 
-      navigate("", { replace: true });
+      return user;
     } catch (error) {
       throw error;
     } finally {

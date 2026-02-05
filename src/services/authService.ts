@@ -17,10 +17,19 @@ export interface AuthResponse {
 
 export const authService = {
   login: async (data: LoginRequest): Promise<AuthResponse> => {
+    localStorage.removeItem("auth_token");
+    localStorage.removeItem("refresh_token");
     const res = await axiosInstance.post("/api/auth/login", data, {
       skipAuth: true,
     } as any);
-    return res.data.data;
+
+    const payload = res.data.data;
+
+    return {
+      user: payload.user,
+      accessToken: payload.tokens.accessToken,
+      refreshToken: payload.tokens.refreshToken,
+    };
   },
 
   register: async (data: RegisterRequest) => {
