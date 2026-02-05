@@ -48,16 +48,7 @@ export default function ProfilePage() {
 
   const isLoading = !profile;
 
-  const [isFollowingLocal, setIsFollowingLocal] = useState(false);
-  const [followersCountLocal, setFollowersCountLocal] = useState(0);
   const navigate = useNavigate();
-
-  useEffect(() => {
-    if (profile) {
-      setIsFollowingLocal(!!profile.isFollowing);
-      setFollowersCountLocal(profile.followersCount || 0);
-    }
-  }, [profile]);
 
   const getFilterParam = () => {
     switch (activeTab) {
@@ -82,21 +73,72 @@ export default function ProfilePage() {
   });
 
   const handleFollowToggle = async () => {
-    if (!userId) return;
+    if (!userId || !profileUserId || !currentUser) return;
+
+    const targetUserKey = ["user", profileUserId];
+    const currentUserKey = ["currentUserProfile"];
+    const currentUserProfileKey = ["user", currentUser._id];
 
     try {
-      if (isFollowingLocal) {
+      if (profile.isFollowing) {
         await axiosInstance.delete(`/api/follow/${userId}/follow`);
-        setIsFollowingLocal(false);
-        setFollowersCountLocal((prev) => Math.max(prev - 1, 0));
+
+        queryClient.setQueryData(targetUserKey, (old: any) => {
+          if (!old) return old;
+          return {
+            ...old,
+            isFollowing: false,
+            followersCount: Math.max((old.followersCount || 1) - 1, 0),
+          };
+        });
+
+        queryClient.setQueryData(currentUserKey, (old: any) => {
+          if (!old) return old;
+          return {
+            ...old,
+            followingCount: Math.max((old.followingCount || 1) - 1, 0),
+          };
+        });
+
+        queryClient.setQueryData(currentUserProfileKey, (old: any) => {
+          if (!old) return old;
+          return {
+            ...old,
+            followingCount: Math.max((old.followingCount || 1) - 1, 0),
+          };
+        });
+
         toast.success("Đã bỏ theo dõi");
       } else {
         await axiosInstance.post(`/api/follow/${userId}/follow`);
-        setIsFollowingLocal(true);
-        setFollowersCountLocal((prev) => prev + 1);
+
+        queryClient.setQueryData(targetUserKey, (old: any) => {
+          if (!old) return old;
+          return {
+            ...old,
+            isFollowing: true,
+            followersCount: (old.followersCount || 0) + 1,
+          };
+        });
+
+        queryClient.setQueryData(currentUserKey, (old: any) => {
+          if (!old) return old;
+          return {
+            ...old,
+            followingCount: (old.followingCount || 0) + 1,
+          };
+        });
+
+        queryClient.setQueryData(currentUserProfileKey, (old: any) => {
+          if (!old) return old;
+          return {
+            ...old,
+            followingCount: (old.followingCount || 0) + 1,
+          };
+        });
+
         toast.success("Đã theo dõi");
       }
-      await refetchProfile();
     } catch (err) {
       console.error(err);
       toast.error("Có lỗi xảy ra");
@@ -204,14 +246,8 @@ export default function ProfilePage() {
     }
   };
 
-  const handleCloseFollowListModal = async () => {
+  const handleCloseFollowListModal = () => {
     setFollowListModal({ ...followListModal, isOpen: false });
-
-    const { data } = await refetchProfile();
-    if (data) {
-      setIsFollowingLocal(!!data.isFollowing);
-      setFollowersCountLocal(data.followersCount || 0);
-    }
   };
 
   const getMediaUrl = (path?: string | null) => {
@@ -283,7 +319,9 @@ export default function ProfilePage() {
                 }
                 className="hover:text-gray-300 cursor-pointer"
               >
-                <span className="font-semibold">{followersCountLocal}</span>
+                <span className="font-semibold">
+                  {profile.followersCount || 0}
+                </span>
                 <span className="ml-1">người theo dõi</span>
               </button>
 
@@ -302,6 +340,9 @@ export default function ProfilePage() {
             </div>
 
             {profile.bio && <p className="text-sm">{profile.bio}</p>}
+            {profile.website && (
+              <p className="text-sm text-blue-400">{profile.website}</p>
+            )}
           </div>
         </div>
 
@@ -325,7 +366,7 @@ export default function ProfilePage() {
           </div>
         ) : (
           <div className="mb-10">
-            {isFollowingLocal ? (
+            {profile.isFollowing ? (
               <div className="flex gap-2">
                 <Button
                   onClick={handleFollowToggle}

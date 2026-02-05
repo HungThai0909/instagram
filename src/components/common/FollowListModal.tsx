@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Link } from "react-router-dom";
@@ -16,9 +16,6 @@ interface User {
   username: string;
   fullName: string;
   profilePicture: string | null;
-  bio: string;
-  isFollowing?: boolean;
-  isFollowedBy?: boolean;
 }
 
 interface FollowListModalProps {
@@ -39,9 +36,7 @@ export default function FollowListModal({
   const [users, setUsers] = useState<User[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
-  const [followingState, setFollowingState] = useState<Record<string, boolean>>(
-    {},
-  );
+  const [currentUserFollowing, setCurrentUserFollowing] = useState<User[]>([]);
 
   const queryClient = useQueryClient();
   const { data: currentUser } = useCurrentUserProfileQuery();
@@ -53,8 +48,22 @@ export default function FollowListModal({
 
   const getMediaUrl = (path?: string | null) => {
     if (!path) return "";
-    if (path.startsWith("http") || path.startsWith("//")) return path;
+    if (path.startsWith("http")) return path;
     return `${axiosInstance.defaults.baseURL}${path}`;
+  };
+
+  const fetchCurrentUserFollowing = async () => {
+    if (!currentUser) return;
+
+    const res = await axiosInstance.get(
+      `/api/follow/${currentUser._id}/following`,
+    );
+
+    const following = (res.data.data.following || []).filter(
+      (u: any) => u && u._id,
+    );
+
+    setCurrentUserFollowing(following);
   };
 
   const fetchUsers = async () => {
@@ -73,21 +82,8 @@ export default function FollowListModal({
           ? res.data.data.followers
           : res.data.data.following;
 
-      setUsers(list);
-
-      setFollowingState((prev) => {
-        const next: Record<string, boolean> = { ...prev };
-
-        list.forEach((u: User) => {
-          if (prev[u._id] !== undefined) return;
-          next[u._id] =
-            isOwnProfile && type === "following" ? true : !!u.isFollowing;
-        });
-
-        return next;
-      });
-    } catch (err) {
-      console.error(err);
+      setUsers((list || []).filter((u: any) => u && u._id));
+    } catch {
       toast.error("Không thể tải danh sách");
     } finally {
       setIsLoading(false);
@@ -96,11 +92,18 @@ export default function FollowListModal({
 
   useEffect(() => {
     if (!isOpen) return;
-    fetchUsers();
+
     document.body.style.overflow = "hidden";
     return () => {
       document.body.style.overflow = "unset";
     };
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen || !currentUser) return;
+
+    fetchCurrentUserFollowing();
+    fetchUsers();
   }, [isOpen, userId, type]);
 
   useEffect(() => {
@@ -112,44 +115,96 @@ export default function FollowListModal({
     return () => document.removeEventListener("keydown", handleEscape);
   }, [isOpen, onClose]);
 
-  useEffect(() => {
-    setFollowingState({});
-  }, [userId]);
+  const followingMap = useMemo(() => {
+    const map: Record<string, boolean> = {};
+    currentUserFollowing.forEach((u) => {
+      if (u?._id) map[u._id] = true;
+    });
+    return map;
+  }, [currentUserFollowing]);
 
-  const handleToggleFollow = (targetUserId: string, username: string) => {
-    const isCurrentlyFollowing = followingState[targetUserId];
+  const handleToggleFollow = (targetUser: User) => {
+    if (!currentUser) return;
 
-    if (isCurrentlyFollowing) {
-      unfollowUser(targetUserId, {
+    const isFollowed = followingMap[targetUser._id];
+
+    const targetUserKey = ["user", targetUser._id];
+    const currentUserKey = ["currentUserProfile"];
+    const currentUserProfileKey = ["user", currentUser._id];
+
+    if (isFollowed) {
+      unfollowUser(targetUser._id, {
         onSuccess: () => {
-          setFollowingState((prev) => ({
-            ...prev,
-            [targetUserId]: false,
-          }));
+          setCurrentUserFollowing((prev) =>
+            prev.filter((u) => u._id !== targetUser._id),
+          );
 
-          if (type === "following" && isOwnProfile) {
-            setUsers((prev) => prev.filter((u) => u._id !== targetUserId));
-          }
+          queryClient.setQueryData(targetUserKey, (old: any) =>
+            old
+              ? {
+                  ...old,
+                  followersCount: Math.max(0, old.followersCount - 1),
+                  isFollowing: false,
+                }
+              : old,
+          );
 
-          queryClient.invalidateQueries({ queryKey: ["followers", userId] });
-          queryClient.invalidateQueries({ queryKey: ["following", userId] });
+          queryClient.setQueryData(currentUserKey, (old: any) =>
+            old
+              ? {
+                  ...old,
+                  followingCount: Math.max(0, old.followingCount - 1),
+                }
+              : old,
+          );
 
-          toast.success(`Đã bỏ theo dõi ${username}`);
+          queryClient.setQueryData(currentUserProfileKey, (old: any) =>
+            old
+              ? {
+                  ...old,
+                  followingCount: Math.max(0, old.followingCount - 1),
+                }
+              : old,
+          );
+
+          toast.success(`Đã bỏ theo dõi ${targetUser.username}`);
         },
         onError: () => toast.error("Không thể bỏ theo dõi"),
       });
     } else {
-      followUser(targetUserId, {
+      followUser(targetUser._id, {
         onSuccess: () => {
-          setFollowingState((prev) => ({
-            ...prev,
-            [targetUserId]: true,
-          }));
+          setCurrentUserFollowing((prev) => [...prev, targetUser]);
 
-          queryClient.invalidateQueries({ queryKey: ["followers", userId] });
-          queryClient.invalidateQueries({ queryKey: ["following", userId] });
+          queryClient.setQueryData(targetUserKey, (old: any) =>
+            old
+              ? {
+                  ...old,
+                  followersCount: old.followersCount + 1,
+                  isFollowing: true,
+                }
+              : old,
+          );
 
-          toast.success(`Đã theo dõi ${username}`);
+          queryClient.setQueryData(currentUserKey, (old: any) =>
+            old
+              ? {
+                  ...old,
+                  followingCount: old.followingCount + 1,
+                }
+              : old,
+          );
+
+          queryClient.setQueryData(currentUserProfileKey, (old: any) =>
+            old
+              ? {
+                  ...old,
+                  followingCount: old.followingCount + 1,
+                }
+              : old,
+          );
+
+          toast.success(`Đã theo dõi ${targetUser.username}`);
         },
         onError: () => toast.error("Không thể theo dõi"),
       });
@@ -159,16 +214,6 @@ export default function FollowListModal({
   if (!isOpen) return null;
 
   const title = type === "followers" ? "Người theo dõi" : "Đang theo dõi";
-
-  const shouldShowFollowButton = (user: User) => {
-    if (user._id === currentUser?._id) return false;
-
-    if (!isOwnProfile) {
-      if (user.isFollowing && user.isFollowedBy) return false;
-    }
-
-    return true;
-  };
 
   return (
     <div
@@ -184,7 +229,7 @@ export default function FollowListModal({
             {title}
           </h2>
           <button onClick={onClose}>
-            <X className="w-6 h-6 text-gray-400 hover:text-white" />
+            <X className="w-6 h-6 text-gray-400 hover:text-white cursor-pointer" />
           </button>
         </div>
 
@@ -198,54 +243,58 @@ export default function FollowListModal({
               Chưa có người nào
             </div>
           ) : (
-            users.map((user) => (
-              <div
-                key={user._id}
-                className="flex items-center gap-3 px-4 py-2 hover:bg-white/5"
-              >
-                <Link to={`/user/${user._id}`} onClick={onClose}>
-                  {user.profilePicture ? (
-                    <img
-                      src={getMediaUrl(user.profilePicture)}
-                      className="w-11 h-11 rounded-full object-cover"
-                    />
-                  ) : (
-                    <div className="w-11 h-11 rounded-full bg-white flex items-center justify-center">
-                      <span className="text-black font-semibold uppercase">
-                        {user.username[0]}
-                      </span>
-                    </div>
-                  )}
-                </Link>
+            users.map((user) => {
+              const isFollowed = followingMap[user._id];
 
-                <div className="flex-1 min-w-0">
-                  <Link
-                    to={`/user/${user._id}`}
-                    onClick={onClose}
-                    className="font-semibold text-sm truncate block"
-                  >
-                    {user.username}
+              return (
+                <div
+                  key={user._id}
+                  className="flex items-center gap-3 px-4 py-2 hover:bg-white/5"
+                >
+                  <Link to={`/user/${user._id}`} onClick={onClose}>
+                    {user.profilePicture ? (
+                      <img
+                        src={getMediaUrl(user.profilePicture)}
+                        className="w-11 h-11 rounded-full object-cover"
+                      />
+                    ) : (
+                      <div className="w-11 h-11 rounded-full bg-white flex items-center justify-center">
+                        <span className="text-black font-semibold uppercase">
+                          {user.username[0]}
+                        </span>
+                      </div>
+                    )}
                   </Link>
-                  <p className="text-gray-400 text-xs truncate">
-                    {user.fullName}
-                  </p>
-                </div>
 
-                {shouldShowFollowButton(user) && (
-                  <Button
-                    onClick={() => handleToggleFollow(user._id, user.username)}
-                    disabled={isFollowing || isUnfollowing}
-                    className={`font-semibold text-sm px-4 h-8 rounded-lg ${
-                      followingState[user._id]
-                        ? "bg-[#363636] hover:bg-[#262626]"
-                        : "bg-[#0095f6] hover:bg-[#1877f2]"
-                    }`}
-                  >
-                    {followingState[user._id] ? "Đang theo dõi" : "Theo dõi"}
-                  </Button>
-                )}
-              </div>
-            ))
+                  <div className="flex-1 min-w-0">
+                    <Link
+                      to={`/user/${user._id}`}
+                      onClick={onClose}
+                      className="font-semibold text-sm truncate block"
+                    >
+                      {user.username}
+                    </Link>
+                    <p className="text-gray-400 text-xs truncate">
+                      {user.fullName}
+                    </p>
+                  </div>
+
+                  {user._id !== currentUser?._id && (
+                    <Button
+                      onClick={() => handleToggleFollow(user)}
+                      disabled={isFollowing || isUnfollowing}
+                      className={`font-semibold text-sm px-4 h-8 rounded-lg cursor-pointer ${
+                        isFollowed
+                          ? "bg-[#363636] hover:bg-[#262626]"
+                          : "bg-[#0095f6] hover:bg-[#1877f2]"
+                      }`}
+                    >
+                      {isFollowed ? "Đang theo dõi" : "Theo dõi"}
+                    </Button>
+                  )}
+                </div>
+              );
+            })
           )}
         </div>
       </div>

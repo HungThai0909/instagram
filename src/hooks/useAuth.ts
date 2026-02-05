@@ -30,6 +30,10 @@ export function useAuth() {
 
       setAuth(user, accessToken);
 
+      toast.success("Đăng nhập thành công!");
+
+      navigate("/", { replace: true });
+
       return user;
     } catch (error) {
       throw error;

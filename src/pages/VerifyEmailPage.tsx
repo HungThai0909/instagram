@@ -1,5 +1,10 @@
 import { useEffect, useState } from "react";
-import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
+import {
+  useLocation,
+  useNavigate,
+  useSearchParams,
+  useParams,
+} from "react-router-dom";
 import { authService } from "@/services/authService";
 import { toast } from "sonner";
 
@@ -7,43 +12,58 @@ export default function VerifyEmailPage() {
   const location = useLocation();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const { token: urlToken } = useParams<{ token: string }>();
   const email = (location.state as any)?.email || "";
   const [isLoading, setIsLoading] = useState(false);
   const [isVerifying, setIsVerifying] = useState(false);
+  const [verifyError, setVerifyError] = useState<string>("");
 
   useEffect(() => {
-  const rawToken = searchParams.get("token");
+    const token = urlToken || searchParams.get("token");
 
-  if (rawToken) {
-    const decodedToken = decodeURIComponent(rawToken);
-    verifyWithToken(decodedToken);
-  }
-}, [searchParams]);
+    if (token) {
+      console.log("Token found:", token);
+      verifyWithToken(token);
+    }
+  }, [urlToken, searchParams]);
 
   const verifyWithToken = async (token: string) => {
-  setIsVerifying(true);
-  try {
-    await authService.verifyEmailWithToken(token);
+    setIsVerifying(true);
+    setVerifyError("");
 
-    toast.success("Email đã được xác thực! Bạn có thể đăng nhập");
+    try {
+      const response = await authService.verifyEmailWithToken(token);
 
-    navigate("/login", {
-      replace: true,
-      state: {
-        verified: true,
-        email, 
-      },
-    });
-  } catch (error: any) {
-    toast.error(error.response?.data?.message || "Xác thực email thất bại");
-  } finally {
-    setIsVerifying(false);
-  }
-};
+      const verifiedEmail = response?.data?.user?.email || email;
+
+      toast.success(
+        "Email đã được xác thực! Đang chuyển đến trang đăng nhập...",
+      );
+
+      setTimeout(() => {
+        navigate("/login", {
+          replace: true,
+          state: {
+            verified: true,
+            email: verifiedEmail,
+          },
+        });
+      }, 1500);
+    } catch (error: any) {
+      const errorMessage =
+        error.response?.data?.message ||
+        error.message ||
+        "Xác thực email thất bại";
+
+      setVerifyError(errorMessage);
+      toast.error(errorMessage);
+      setIsVerifying(false);
+    }
+  };
 
   const handleResend = async () => {
     if (!email) {
-      toast.error("Email không được tìm thấy");
+      toast.error("Email không được tìm thấy. Vui lòng đăng ký lại.");
       return;
     }
     setIsLoading(true);
@@ -57,6 +77,10 @@ export default function VerifyEmailPage() {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleBackToLogin = () => {
+    navigate("/login", { replace: true });
   };
 
   return (
@@ -81,40 +105,83 @@ export default function VerifyEmailPage() {
               Instagram
             </h1>
             <p className="text-white font-semibold text-lg">Xác thực email</p>
-            <p className="text-gray-400 text-sm mt-3">
-              Chúng tôi đã gửi link xác thực đến email của bạn. Vui lòng kiểm
-              tra hộp thư để kích hoạt tài khoản.
-            </p>
-            {email && (
-              <p className="font-semibold text-sm mt-2 break-all text-gray-300">
-                {email}
-              </p>
-            )}
-          </div>
 
-          <div className="mt-8 text-center text-sm">
-            <p className="text-gray-400">
-              Không nhận được email?
-              <button
-                onClick={handleResend}
-                disabled={isLoading || isVerifying}
-                className="text-blue-400 hover:text-blue-300 font-semibold cursor-pointer ml-1 disabled:opacity-50"
-              >
-                {isLoading ? "Đang gửi..." : "Gửi lại"}
-              </button>
-            </p>
+            {!isVerifying &&
+              !verifyError &&
+              !urlToken &&
+              !searchParams.get("token") && (
+                <>
+                  <p className="text-gray-400 text-sm mt-3">
+                    Chúng tôi đã gửi link xác thực đến email của bạn. Vui lòng
+                    kiểm tra hộp thư để kích hoạt tài khoản.
+                  </p>
+                  {email && (
+                    <p className="font-semibold text-sm mt-2 break-all text-gray-300">
+                      {email}
+                    </p>
+                  )}
+                </>
+              )}
           </div>
 
           {isVerifying && (
             <div className="mt-6 text-center">
-              <div className="flex justify-center mb-2">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-400"></div>
+              <div className="flex justify-center mb-4">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-400"></div>
               </div>
-              <p className="text-gray-400 text-sm">
+              <p className="text-white text-base font-semibold mb-2">
                 Đang xác thực email của bạn...
+              </p>
+              <p className="text-gray-400 text-sm">
+                Vui lòng đợi trong giây lát
               </p>
             </div>
           )}
+
+          {verifyError && (
+            <div className="mt-6 text-center">
+              <div className="bg-red-900/20 border border-red-800 rounded-lg p-4 mb-4">
+                <p className="text-red-400 text-sm">{verifyError}</p>
+              </div>
+
+              <div className="space-y-3">
+                {email && (
+                  <button
+                    onClick={handleResend}
+                    disabled={isLoading}
+                    className="w-full h-11 font-bold rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-base cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {isLoading ? "Đang gửi..." : "Gửi lại email xác thực"}
+                  </button>
+                )}
+
+                <button
+                  onClick={handleBackToLogin}
+                  className="w-full h-11 font-semibold rounded-lg bg-gray-800 hover:bg-gray-700 text-white text-base cursor-pointer"
+                >
+                  Quay lại đăng nhập
+                </button>
+              </div>
+            </div>
+          )}
+
+          {!isVerifying &&
+            !verifyError &&
+            !urlToken &&
+            !searchParams.get("token") && (
+              <div className="mt-8 text-center text-sm">
+                <p className="text-gray-400">
+                  Không nhận được email?
+                  <button
+                    onClick={handleResend}
+                    disabled={isLoading}
+                    className="text-blue-400 hover:text-blue-300 font-semibold cursor-pointer ml-1 disabled:opacity-50"
+                  >
+                    {isLoading ? "Đang gửi..." : "Gửi lại"}
+                  </button>
+                </p>
+              </div>
+            )}
         </div>
       </div>
     </div>

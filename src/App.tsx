@@ -59,6 +59,7 @@ export default function App() {
               element={<ResetPasswordPage />}
             />
             <Route path="/verify-email" element={<VerifyEmailPage />} />
+            <Route path="/verify-email/:token" element={<VerifyEmailPage />} />
           </Route>
 
           <Route element={<ProtectedLayout />}>

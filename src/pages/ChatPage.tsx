@@ -8,7 +8,7 @@ import { toast } from "sonner";
 import { useLocation } from "react-router-dom";
 import NewMessageModal from "@/components/common/NewMessageModal";
 import io, { Socket } from "socket.io-client";
-
+import { Link } from "react-router-dom";
 interface Participant {
   _id: string;
   username: string;
@@ -167,12 +167,29 @@ export default function ChatPage() {
     socket.on("new_message", (message: MessageData) => {
       const currentConv = selectedConvRef.current;
 
-      if (currentConv && message.conversationId === currentConv._id) {
-        setMessages((prev) => {
-          if (prev.some((m) => m._id === message._id)) return prev;
-          return [...prev, message];
-        });
-      }
+      if (!currentConv || message.conversationId !== currentConv._id) return;
+
+      setMessages((prev) => {
+        const tempIndex = prev.findIndex(
+          (m) =>
+            m._id.startsWith("temp-") &&
+            m.messageType === "image" &&
+            m.senderId._id === message.senderId._id,
+        );
+
+        if (tempIndex !== -1) {
+          const clone = [...prev];
+          clone[tempIndex] = {
+            ...message,
+            content: message.content || clone[tempIndex].content,
+          };
+          return clone;
+        }
+
+        return prev.some((m) => m._id === message._id)
+          ? prev
+          : [...prev, message];
+      });
 
       fetchConversations();
       fetchUnreadCount();
@@ -306,10 +323,6 @@ export default function ChatPage() {
         try {
           await axiosInstance.put(`/api/messages/messages/${msg._id}/read`);
           markedAsReadRef.current.add(msg._id);
-
-          setMessages((prev) =>
-            prev.map((m) => (m._id === msg._id ? { ...m, isRead: true } : m)),
-          );
         } catch (err) {
           console.error("Failed to mark message as read:", msg._id, err);
         }
@@ -356,43 +369,53 @@ export default function ChatPage() {
   };
 
   const handleSend = async () => {
-    if ((!input.trim() && !selectedImage) || !selectedConv || isSending) return;
+    if (!selectedConv || isSending) return;
 
     const otherUser = getOtherParticipant(selectedConv, currentUserId);
     if (!otherUser) return;
 
-    if (socketRef.current) {
-      socketRef.current.emit("stop_typing", {
-        conversationId: selectedConv._id,
-        recipientId: otherUser._id,
-      });
-    }
+    setIsSending(true);
 
     try {
-      setIsSending(true);
+      if (selectedImage && imagePreview) {
+        const tempMessage: MessageData = {
+          _id: `temp-${Date.now()}`,
+          conversationId: selectedConv._id,
+          senderId: currentUser as any,
+          recipientId: otherUser._id,
+          messageType: "image",
+          content: imagePreview,
+          isRead: true,
+          createdAt: new Date().toISOString(),
+        };
 
-      if (selectedImage) {
+        setMessages((prev) => [...prev, tempMessage]);
+        setSelectedImage(null);
+        setImagePreview(null);
+        if (imageInputRef.current) imageInputRef.current.value = "";
+
         const formData = new FormData();
-        formData.append("file", selectedImage);
         formData.append("conversationId", selectedConv._id);
         formData.append("recipientId", otherUser._id);
         formData.append("messageType", "image");
+        formData.append("image", selectedImage);
 
         const res = await axiosInstance.post(
           "/api/messages/messages",
           formData,
-          {
-            headers: { "Content-Type": "multipart/form-data" },
-          },
         );
 
-        setMessages((prev) => [...prev, res.data.data]);
-        setSelectedImage(null);
-        setImagePreview(null);
-        if (imageInputRef.current) {
-          imageInputRef.current.value = "";
-        }
-      } else {
+        setMessages((prev) =>
+          prev.map((m) =>
+            m._id === tempMessage._id
+              ? {
+                  ...res.data.data,
+                  content: res.data.data.content || m.content,
+                }
+              : m,
+          ),
+        );
+      } else if (input.trim()) {
         const res = await axiosInstance.post("/api/messages/messages", {
           conversationId: selectedConv._id,
           recipientId: otherUser._id,
@@ -401,13 +424,9 @@ export default function ChatPage() {
         });
 
         setMessages((prev) => [...prev, res.data.data]);
+        setInput("");
       }
-
-      setInput("");
-      fetchConversations();
-      fetchUnreadCount();
-    } catch (err) {
-      console.error("send message", err);
+    } catch {
       toast.error("Không thể gửi tin nhắn");
     } finally {
       setIsSending(false);
@@ -544,7 +563,12 @@ export default function ChatPage() {
           <>
             <div className="flex items-center justify-between px-5 py-3 border-b border-gray-700 flex-shrink-0">
               <div className="flex items-center gap-3">
-                <Avatar user={otherUser} size={40} />
+                <Link
+                  to={`/user/${otherUser._id}`}
+                  className="cursor-pointer hover:opacity-80"
+                >
+                  <Avatar user={otherUser} size={40} />
+                </Link>
                 <div>
                   <p className="text-sm font-semibold">{otherUser.fullName}</p>
                   <p className="text-xs text-gray-500">
@@ -608,10 +632,15 @@ export default function ChatPage() {
                               >
                                 {msg.messageType === "image" && msg.content ? (
                                   <img
-                                    src={getMediaUrl(msg.content)}
-                                    alt="message"
+                                    src={
+                                      msg.content.startsWith("data:")
+                                        ? msg.content
+                                        : getMediaUrl(msg.content)
+                                    }
                                     className="max-w-full rounded-lg"
                                   />
+                                ) : msg.messageType === "image" ? (
+                                  <div className="w-40 h-32 bg-[#333] animate-pulse rounded-lg" />
                                 ) : (
                                   <p className="text-sm break-words">
                                     {msg.content}

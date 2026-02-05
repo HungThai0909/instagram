@@ -32,9 +32,20 @@ const axiosInstance = axios.create({
 
 axiosInstance.interceptors.request.use((config) => {
   const token = localStorage.getItem("auth_token");
+
   if (token && config.headers) {
     config.headers.Authorization = `Bearer ${token}`;
   }
+
+  if (config.data instanceof FormData) {
+    delete config.headers?.["Content-Type"];
+  } else {
+    config.headers = {
+      ...config.headers,
+      "Content-Type": "application/json",
+    };
+  }
+
   return config;
 }, Promise.reject);
 

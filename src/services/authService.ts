@@ -40,12 +40,26 @@ export const authService = {
   },
 
   verifyEmailWithToken: async (token: string) => {
-    const res = await axiosInstance.post(
-      `/api/auth/verify-email/${token}`,
-      {},
-      { skipAuth: true } as any,
-    );
-    return res.data.data;
+    console.log("Calling verify API with token:", token);
+    
+    try {
+      const res = await axiosInstance.post(
+        `/api/auth/verify-email/${token}`,
+        {},
+        { skipAuth: true } as any,
+      );
+      
+      console.log("Verify API response:", res.data);
+      return res.data.data;
+    } catch (error: any) {
+      console.error("Verify API error:", error);
+      console.error("Error details:", {
+        status: error.response?.status,
+        data: error.response?.data,
+        message: error.message,
+      });
+      throw error;
+    }
   },
 
   resendVerification: async (email: string) => {

@@ -41,7 +41,9 @@ export default function PostCard({ post, onDelete }: PostCardProps) {
   const { mutate: savePost } = useSavePostMutation();
   const { mutate: unsavePost } = useUnsavePostMutation();
 
-  const isOwnPost = currentUser?.id === post.user?.id;
+  const currentUserId = (currentUser as any)?._id ?? currentUser?.id ?? "";
+  const postUserId = (post.user as any)?._id ?? post.user?.id ?? "";
+  const isOwnPost = currentUserId && postUserId && currentUserId === postUserId;
 
   const handleLike = () => {
     if (post.is_liked) {
@@ -198,9 +200,7 @@ export default function PostCard({ post, onDelete }: PostCardProps) {
                 </span>
               </button>
 
-              <button
-                className="hover:opacity-70 cursor-pointer"
-              >
+              <button className="hover:opacity-70 cursor-pointer">
                 <Send className="w-7 h-7" />
               </button>
             </div>

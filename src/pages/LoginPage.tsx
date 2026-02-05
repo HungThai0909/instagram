@@ -11,7 +11,7 @@ import { toast } from "sonner";
 
 const loginSchema = z.object({
   email: z.string().email("Địa chỉ email không hợp lệ"),
-  password: z.string().min(6, "Mật khẩu phải ít nhất 6 ký tự"),
+  password: z.string().min(8, "Mật khẩu phải ít nhất 8 ký tự"),
 });
 
 type LoginInput = z.infer<typeof loginSchema>;

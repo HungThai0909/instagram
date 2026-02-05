@@ -372,7 +372,9 @@ export default function CommentModal({
 
   if (!isOpen) return null;
 
-  const isOwnPost = currentUser?.id === post.user?.id;
+  const currentUserId = (currentUser as any)?._id ?? currentUser?.id ?? "";
+  const postUserId = (post.user as any)?._id ?? post.user?.id ?? "";
+  const isOwnPost = currentUserId && postUserId && currentUserId === postUserId;
 
   return (
     <div
@@ -543,12 +545,22 @@ export default function CommentModal({
                             Trả lời
                           </button>
                           <button
-                            onClick={() =>
+                            onClick={() => {
+                              const commentUserId =
+                                (comment.userId as any)?._id ??
+                                (comment.userId as any)?.id ??
+                                "";
+                              const currentUserIdCheck =
+                                (currentUser as any)?._id ??
+                                currentUser?.id ??
+                                "";
                               handleOpenCommentOptions(
                                 comment._id,
-                                comment.userId._id === currentUser?.id,
-                              )
-                            }
+                                commentUserId &&
+                                  currentUserIdCheck &&
+                                  commentUserId === currentUserIdCheck,
+                              );
+                            }}
                             className={`text-gray-500 hover:text-white cursor-pointer transition-opacity ${
                               hoveredCommentId === comment._id
                                 ? "opacity-100"
