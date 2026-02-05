@@ -1,6 +1,6 @@
+
 import { useEffect, useState } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
-import { Button } from "@/components/ui/button";
 import { authService } from "@/services/authService";
 import { toast } from "sonner";
 
@@ -22,9 +22,8 @@ export default function VerifyEmailPage() {
   const verifyWithToken = async (token: string) => {
     setIsVerifying(true);
     try {
-      const res = await authService.verifyEmailWithToken(token);
-      toast.success(res?.message || "Email đã được xác thực thành công");
-
+      await authService.verifyEmailWithToken(token);
+      toast.success("Email đã được xác thực thành công! Vui lòng đăng nhập lại.");
       navigate("/login", { replace: true });
     } catch (error: any) {
       toast.error(error.response?.data?.message || "Xác thực email thất bại");
@@ -85,12 +84,12 @@ export default function VerifyEmailPage() {
           </div>
 
           <div className="mt-8 text-center text-sm">
-            <p className="text-gray-400 r">
+            <p className="text-gray-400">
               Không nhận được email?
               <button
                 onClick={handleResend}
                 disabled={isLoading || isVerifying}
-                className="text-blue-400 hover:text-blue-300 font-semibold cursor-pointer ml-1"
+                className="text-blue-400 hover:text-blue-300 font-semibold cursor-pointer ml-1 disabled:opacity-50"
               >
                 {isLoading ? "Đang gửi..." : "Gửi lại"}
               </button>
@@ -99,6 +98,9 @@ export default function VerifyEmailPage() {
 
           {isVerifying && (
             <div className="mt-6 text-center">
+              <div className="flex justify-center mb-2">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-400"></div>
+              </div>
               <p className="text-gray-400 text-sm">
                 Đang xác thực email của bạn...
               </p>

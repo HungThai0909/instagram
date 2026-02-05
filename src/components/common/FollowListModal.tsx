@@ -18,6 +18,7 @@ interface User {
   profilePicture: string | null;
   bio: string;
   isFollowing?: boolean;
+  isFollowedBy?: boolean;
 }
 
 interface FollowListModalProps {
@@ -75,19 +76,18 @@ export default function FollowListModal({
       setUsers(list);
 
       setFollowingState((prev) => {
-        const nextState: Record<string, boolean> = { ...prev };
+        const next: Record<string, boolean> = { ...prev };
 
         list.forEach((u: User) => {
           if (prev[u._id] !== undefined) return;
-
-          nextState[u._id] =
-            type === "following" && isOwnProfile ? true : !!u.isFollowing;
+          next[u._id] =
+            isOwnProfile && type === "following" ? true : !!u.isFollowing;
         });
 
-        return nextState;
+        return next;
       });
-    } catch (error) {
-      console.error(error);
+    } catch (err) {
+      console.error(err);
       toast.error("Không thể tải danh sách");
     } finally {
       setIsLoading(false);
@@ -96,10 +96,8 @@ export default function FollowListModal({
 
   useEffect(() => {
     if (!isOpen) return;
-
     fetchUsers();
     document.body.style.overflow = "hidden";
-
     return () => {
       document.body.style.overflow = "unset";
     };
@@ -107,14 +105,16 @@ export default function FollowListModal({
 
   useEffect(() => {
     if (!isOpen) return;
-
     const handleEscape = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
     };
-
     document.addEventListener("keydown", handleEscape);
     return () => document.removeEventListener("keydown", handleEscape);
   }, [isOpen, onClose]);
+
+  useEffect(() => {
+    setFollowingState({});
+  }, [userId]);
 
   const handleToggleFollow = (targetUserId: string, username: string) => {
     const isCurrentlyFollowing = followingState[targetUserId];
@@ -136,9 +136,7 @@ export default function FollowListModal({
 
           toast.success(`Đã bỏ theo dõi ${username}`);
         },
-        onError: () => {
-          toast.error("Không thể bỏ theo dõi");
-        },
+        onError: () => toast.error("Không thể bỏ theo dõi"),
       });
     } else {
       followUser(targetUserId, {
@@ -153,9 +151,7 @@ export default function FollowListModal({
 
           toast.success(`Đã theo dõi ${username}`);
         },
-        onError: () => {
-          toast.error("Không thể theo dõi");
-        },
+        onError: () => toast.error("Không thể theo dõi"),
       });
     }
   };
@@ -163,6 +159,16 @@ export default function FollowListModal({
   if (!isOpen) return null;
 
   const title = type === "followers" ? "Người theo dõi" : "Đang theo dõi";
+
+  const shouldShowFollowButton = (user: User) => {
+    if (user._id === currentUser?._id) return false;
+
+    if (!isOwnProfile) {
+      if (user.isFollowing && user.isFollowedBy) return false;
+    }
+
+    return true;
+  };
 
   return (
     <div
@@ -177,18 +183,15 @@ export default function FollowListModal({
           <h2 className="text-base font-semibold flex-1 text-center">
             {title}
           </h2>
-          <button
-            onClick={onClose}
-            className="text-gray-400 hover:text-white cursor-pointer"
-          >
-            <X className="w-6 h-6" />
+          <button onClick={onClose}>
+            <X className="w-6 h-6 text-gray-400 hover:text-white" />
           </button>
         </div>
 
         <div className="flex-1 overflow-y-auto">
           {isLoading ? (
-            <div className="flex items-center justify-center py-12">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white" />
+            <div className="flex justify-center py-12">
+              <div className="animate-spin h-8 w-8 border-b-2 border-white rounded-full" />
             </div>
           ) : users.length === 0 ? (
             <div className="text-center py-12 text-gray-400">
@@ -204,7 +207,6 @@ export default function FollowListModal({
                   {user.profilePicture ? (
                     <img
                       src={getMediaUrl(user.profilePicture)}
-                      alt={user.username}
                       className="w-11 h-11 rounded-full object-cover"
                     />
                   ) : (
@@ -220,7 +222,7 @@ export default function FollowListModal({
                   <Link
                     to={`/user/${user._id}`}
                     onClick={onClose}
-                    className="font-semibold text-sm block truncate hover:opacity-70"
+                    className="font-semibold text-sm truncate block"
                   >
                     {user.username}
                   </Link>
@@ -229,14 +231,14 @@ export default function FollowListModal({
                   </p>
                 </div>
 
-                {user._id !== currentUser?._id && (
+                {shouldShowFollowButton(user) && (
                   <Button
                     onClick={() => handleToggleFollow(user._id, user.username)}
                     disabled={isFollowing || isUnfollowing}
-                    className={`font-semibold text-sm px-4 h-8 rounded-lg cursor-pointer disabled:opacity-50 ${
+                    className={`font-semibold text-sm px-4 h-8 rounded-lg ${
                       followingState[user._id]
-                        ? "bg-[#363636] hover:bg-[#262626] text-white"
-                        : "bg-[#0095f6] hover:bg-[#1877f2] text-white"
+                        ? "bg-[#363636] hover:bg-[#262626]"
+                        : "bg-[#0095f6] hover:bg-[#1877f2]"
                     }`}
                   >
                     {followingState[user._id] ? "Đang theo dõi" : "Theo dõi"}

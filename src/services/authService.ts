@@ -1,31 +1,74 @@
 import axiosInstance from "./axios";
-import type { AuthResponse, LoginRequest } from "@/types";
+import type { LoginRequest, User } from "@/types";
+
+export interface RegisterRequest {
+  email: string;
+  username: string;
+  password: string;
+  confirmPassword: string;
+  fullName: string;
+}
+
+export interface AuthResponse {
+  user: User;
+  accessToken: string;
+  refreshToken: string;
+}
 
 export const authService = {
   login: async (data: LoginRequest): Promise<AuthResponse> => {
-    const response = await axiosInstance.post("/api/auth/login", data);
+    const res = await axiosInstance.post("/api/auth/login", data, {
+      skipAuth: true,
+    } as any);
+    return res.data.data;
+  },
 
-    const payload = response.data?.data;
+  register: async (data: RegisterRequest) => {
+    const res = await axiosInstance.post("/api/auth/register", data, {
+      skipAuth: true,
+    } as any);
+    return res.data.data;
+  },
 
-    return {
-      token: payload.tokens.accessToken,
-      user: {
-        id: payload.user._id,
-        email: payload.user.email,
-        username: payload.user.username,
-        full_name: payload.user.fullName,
-        avatar: payload.user.profilePicture,
-        bio: payload.user.bio || "",
-        is_verified: true,
-        created_at: "",
-        updated_at: "",
-      },
-    };
+  verifyEmailWithToken: async (token: string) => {
+    const res = await axiosInstance.post(
+      `/api/auth/verify-email/${token}`,
+      {},
+      { skipAuth: true } as any,
+    );
+    return res.data.data;
+  },
+
+  resendVerification: async (email: string) => {
+    const res = await axiosInstance.post(
+      "/api/auth/resend-verification-email",
+      { email },
+      { skipAuth: true } as any,
+    );
+    return res.data.data;
+  },
+
+  forgotPassword: async (data: { email: string }) => {
+    const res = await axiosInstance.post("/api/auth/forgot-password", data, {
+      skipAuth: true,
+    } as any);
+    return res.data;
+  },
+
+  resetPassword: async (
+    token: string,
+    data: { password: string; confirmPassword: string },
+  ) => {
+    const res = await axiosInstance.post(
+      `/api/auth/reset-password/${token}`,
+      data,
+      { skipAuth: true } as any,
+    );
+    return res.data.data;
   },
 
   logout: async () => {
     localStorage.removeItem("auth_token");
-    localStorage.removeItem("current_user");
-    localStorage.removeItem("auth-storage");
+    localStorage.removeItem("refresh_token");
   },
 };

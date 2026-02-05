@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 import CreatePostModal from "./CreatePostModal";
+import { useCurrentUserProfileQuery } from "@/hooks/useUserQuery";
 
 interface SidebarProps {
   searchOpen: boolean;
@@ -29,6 +30,7 @@ export default function Sidebar({
 }: SidebarProps) {
   const location = useLocation();
   const { user, logout } = useAuthStore();
+  const { data: currentUser } = useCurrentUserProfileQuery();
   const [createPostModal, setCreatePostModal] = useState(false);
 
   const [activePanel, setActivePanel] = useState<
@@ -75,7 +77,7 @@ export default function Sidebar({
     {
       label: "Trang cá nhân",
       icon: UserIcon,
-      href: `/user/${user?.id}`,
+      href: currentUser ? `/user/${currentUser._id}` : "",
       action: null,
       id: "profile",
     },

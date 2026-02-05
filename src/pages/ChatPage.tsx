@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { formatDistanceToNow } from "date-fns";
+import { formatDistanceToNow, format } from "date-fns";
 import { vi } from "date-fns/locale";
-import { Edit2, Phone, Video, Info } from "lucide-react";
+import { Edit2, Phone, Video, Info, X } from "lucide-react";
 import axiosInstance from "@/services/axios";
 import { useAuthStore } from "@/stores/authStore";
 import { toast } from "sonner";
@@ -64,6 +64,31 @@ function formatTime(dateStr: string) {
   }
 }
 
+function groupMessagesByDate(messages: MessageData[]) {
+  const groups: { date: string; messages: MessageData[] }[] = [];
+  let currentDate = "";
+  let currentGroup: MessageData[] = [];
+
+  messages.forEach((msg) => {
+    const msgDate = format(new Date(msg.createdAt), "dd/MM/yyyy");
+    if (msgDate !== currentDate) {
+      if (currentGroup.length > 0) {
+        groups.push({ date: currentDate, messages: currentGroup });
+      }
+      currentDate = msgDate;
+      currentGroup = [msg];
+    } else {
+      currentGroup.push(msg);
+    }
+  });
+
+  if (currentGroup.length > 0) {
+    groups.push({ date: currentDate, messages: currentGroup });
+  }
+
+  return groups;
+}
+
 function Avatar({ user, size = 44 }: { user: Participant; size?: number }) {
   const cls = `rounded-full object-cover flex-shrink-0`;
   if (user.profilePicture) {
@@ -94,17 +119,32 @@ function Avatar({ user, size = 44 }: { user: Participant; size?: number }) {
 export default function ChatPage() {
   const { user: currentUser } = useAuthStore();
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
+  const didFetchConvsRef = useRef(false);
+  const markedAsReadRef = useRef<Set<string>>(new Set());
+  const location = useLocation();
+  const initialConvId = location.state?.conversationId;
+
   const [newMessageModal, setNewMessageModal] = useState(false);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [selectedConv, setSelectedConv] = useState<Conversation | null>(null);
   const [messages, setMessages] = useState<MessageData[]>([]);
   const [input, setInput] = useState("");
+  const [selectedImage, setSelectedImage] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [isLoadingConvs, setIsLoadingConvs] = useState(true);
   const [isLoadingMsgs, setIsLoadingMsgs] = useState(false);
   const [isSending, setIsSending] = useState(false);
-  const didFetchConvsRef = useRef(false);
-  const location = useLocation();
-  const initialConvId = location.state?.conversationId;
+  const [totalUnreadCount, setTotalUnreadCount] = useState(0);
+
+  const fetchUnreadCount = useCallback(async () => {
+    try {
+      const res = await axiosInstance.get("/api/messages/unread-count");
+      setTotalUnreadCount(res.data.data.unreadCount || 0);
+    } catch (err) {
+      console.error("fetch unread count", err);
+    }
+  }, []);
 
   const fetchConversations = useCallback(async () => {
     try {
@@ -122,9 +162,9 @@ export default function ChatPage() {
   useEffect(() => {
     if (didFetchConvsRef.current) return;
     didFetchConvsRef.current = true;
-
     fetchConversations();
-  }, [fetchConversations]);
+    fetchUnreadCount();
+  }, [fetchConversations, fetchUnreadCount]);
 
   const fetchMessages = useCallback(async (convId: string) => {
     try {
@@ -142,8 +182,52 @@ export default function ChatPage() {
   }, []);
 
   useEffect(() => {
-    if (selectedConv) fetchMessages(selectedConv._id);
+    if (selectedConv) {
+      fetchMessages(selectedConv._id);
+
+      markedAsReadRef.current.clear();
+    }
   }, [selectedConv, fetchMessages]);
+
+  useEffect(() => {
+    if (!selectedConv || !currentUser || messages.length === 0) return;
+
+    const unreadMessages = messages.filter(
+      (msg) =>
+        !msg.isRead &&
+        msg.senderId._id !== currentUser.id &&
+        !markedAsReadRef.current.has(msg._id),
+    );
+
+    if (unreadMessages.length === 0) return;
+
+    const markAsRead = async () => {
+      for (const msg of unreadMessages) {
+        try {
+          await axiosInstance.put(`/api/messages/messages/${msg._id}/read`);
+          markedAsReadRef.current.add(msg._id);
+
+          setMessages((prev) =>
+            prev.map((m) => (m._id === msg._id ? { ...m, isRead: true } : m)),
+          );
+        } catch (err) {
+          console.error("Failed to mark message as read:", msg._id, err);
+        }
+      }
+
+      fetchConversations();
+      fetchUnreadCount();
+    };
+
+    const timer = setTimeout(markAsRead, 500);
+    return () => clearTimeout(timer);
+  }, [
+    messages,
+    selectedConv,
+    currentUser,
+    fetchConversations,
+    fetchUnreadCount,
+  ]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -151,7 +235,6 @@ export default function ChatPage() {
 
   useEffect(() => {
     if (!initialConvId || conversations.length === 0) return;
-
     const found = conversations.find((c) => c._id === initialConvId);
     if (found) {
       setSelectedConv(found);
@@ -160,7 +243,6 @@ export default function ChatPage() {
 
   const handleConversationCreated = async (conversationId: string) => {
     await fetchConversations();
-
     const conv = conversations.find((c) => c._id === conversationId);
     if (conv) {
       setSelectedConv(conv);
@@ -174,29 +256,90 @@ export default function ChatPage() {
   };
 
   const handleSend = async () => {
-    if (!input.trim() || !selectedConv || isSending) return;
+    if ((!input.trim() && !selectedImage) || !selectedConv || isSending) return;
 
     const otherUser = getOtherParticipant(selectedConv, currentUser?.id || "");
     if (!otherUser) return;
 
     try {
       setIsSending(true);
-      const res = await axiosInstance.post("/api/messages/messages", {
-        conversationId: selectedConv._id,
-        recipientId: otherUser._id,
-        messageType: "text",
-        content: input.trim(),
-      });
 
-      setMessages((prev) => [...prev, res.data.data]);
+      if (selectedImage) {
+        const formData = new FormData();
+        formData.append("file", selectedImage);
+        formData.append("conversationId", selectedConv._id);
+        formData.append("recipientId", otherUser._id);
+        formData.append("messageType", "image");
+
+        const res = await axiosInstance.post(
+          "/api/messages/messages",
+          formData,
+          {
+            headers: { "Content-Type": "multipart/form-data" },
+          },
+        );
+
+        setMessages((prev) => [...prev, res.data.data]);
+        setSelectedImage(null);
+        setImagePreview(null);
+        if (imageInputRef.current) {
+          imageInputRef.current.value = "";
+        }
+      } else {
+        const res = await axiosInstance.post("/api/messages/messages", {
+          conversationId: selectedConv._id,
+          recipientId: otherUser._id,
+          messageType: "text",
+          content: input.trim(),
+        });
+
+        setMessages((prev) => [...prev, res.data.data]);
+      }
+
       setInput("");
-
       fetchConversations();
+      fetchUnreadCount();
     } catch (err) {
       console.error("send message", err);
       toast.error("Không thể gửi tin nhắn");
     } finally {
       setIsSending(false);
+    }
+  };
+
+  const handleImageClick = () => {
+    imageInputRef.current?.click();
+  };
+
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith("image/")) {
+      toast.error("Chỉ chấp nhận file ảnh");
+      return;
+    }
+
+    const maxSize = 10 * 1024 * 1024;
+    if (file.size > maxSize) {
+      toast.error("Kích thước ảnh không được vượt quá 10MB");
+      return;
+    }
+
+    setSelectedImage(file);
+
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setImagePreview(reader.result as string);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleRemoveImage = () => {
+    setSelectedImage(null);
+    setImagePreview(null);
+    if (imageInputRef.current) {
+      imageInputRef.current.value = "";
     }
   };
 
@@ -208,9 +351,16 @@ export default function ChatPage() {
     <div className="flex h-screen bg-black text-white">
       <div className="w-96 border-r border-gray-700 flex flex-col flex-shrink-0 bg-[#000]">
         <div className="flex items-center justify-between px-5 pt-6 pb-3">
-          <h2 className="text-xl font-semibold">
-            {currentUser?.username || "Tin nhắn"}
-          </h2>
+          <div className="flex items-center gap-2">
+            <h2 className="text-xl font-semibold">
+              {currentUser?.username || "Tin nhắn"}
+            </h2>
+            {totalUnreadCount > 0 && (
+              <span className="bg-red-500 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">
+                {totalUnreadCount > 99 ? "99+" : totalUnreadCount}
+              </span>
+            )}
+          </div>
           <button
             onClick={() => setNewMessageModal(true)}
             className="text-white hover:opacity-70 cursor-pointer"
@@ -245,7 +395,6 @@ export default function ChatPage() {
               const other = getOtherParticipant(conv, currentUser?.id || "");
               if (!other) return null;
               const isSelected = selectedConv?._id === conv._id;
-
               const lastText =
                 conv.lastMessage?.content || "Bất đầu trò chuyện";
 
@@ -307,79 +456,136 @@ export default function ChatPage() {
               </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3">
+            <div className="flex-1 overflow-y-auto px-5 py-4">
               {isLoadingMsgs ? (
                 <div className="flex justify-center py-10">
                   <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-white" />
                 </div>
               ) : messages.length === 0 ? (
-                <div className="flex flex-col items-center justify-center h-full gap-3 py-20">
+                <div className="flex flex-col items-center justify-center h-full gap-3">
                   <Avatar user={otherUser} size={80} />
                   <p className="text-sm font-semibold">{otherUser.fullName}</p>
-                  <p className="text-xs text-gray-500">
+                  <p className="text-xs text-gray-500 text-center">
                     Bạn và {otherUser.username} không có tin nhắn nào. Bắt đầu
                     một cuộc trò chuyện mới!
                   </p>
                 </div>
               ) : (
-                messages.map((msg) => {
-                  const isOwn = msg.senderId._id === currentUser?.id;
-                  return (
-                    <div
-                      key={msg._id}
-                      className={`flex ${isOwn ? "justify-end" : "justify-start"}`}
-                    >
-                      <div
-                        className={`max-w-xs px-4 py-2 rounded-2xl ${
-                          isOwn
-                            ? "bg-[#0095f6] text-white rounded-br-sm"
-                            : "bg-[#262626] text-white rounded-bl-sm"
-                        }`}
-                      >
-                        <p className="text-sm break-words">{msg.content}</p>
+                <div className="space-y-4">
+                  {groupMessagesByDate(messages).map((group, groupIdx) => (
+                    <div key={groupIdx}>
+                      <div className="flex items-center justify-center mb-4">
+                        <div className="bg-[#262626] px-3 py-1 rounded-full">
+                          <p className="text-xs text-gray-400">{group.date}</p>
+                        </div>
+                      </div>
+
+                      <div className="space-y-3">
+                        {group.messages.map((msg) => {
+                          const isOwn = msg.senderId._id === currentUser?.id;
+                          return (
+                            <div
+                              key={msg._id}
+                              className={`flex ${
+                                isOwn ? "justify-end" : "justify-start"
+                              }`}
+                            >
+                              <div
+                                className={`max-w-xs px-4 py-2 rounded-2xl ${
+                                  isOwn
+                                    ? "bg-[#0095f6] text-white rounded-br-sm"
+                                    : "bg-[#262626] text-white rounded-bl-sm"
+                                }`}
+                              >
+                                {msg.messageType === "image" && msg.content ? (
+                                  <img
+                                    src={getMediaUrl(msg.content)}
+                                    alt="message"
+                                    className="max-w-full rounded-lg"
+                                  />
+                                ) : (
+                                  <p className="text-sm break-words">
+                                    {msg.content}
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
                       </div>
                     </div>
-                  );
-                })
+                  ))}
+                </div>
               )}
               <div ref={messagesEndRef} />
             </div>
 
-            <div className="flex items-center gap-3 px-5 py-3 border-t border-gray-700 flex-shrink-0">
-              <button className="text-[#0095f6] hover:opacity-70 cursor-pointer flex-shrink-0">
-                <svg
-                  className="w-6 h-6"
-                  fill="currentColor"
-                  viewBox="0 0 24 24"
+            <div className="border-t border-gray-700 flex-shrink-0">
+              {imagePreview && (
+                <div className="px-5 pt-3">
+                  <div className="relative inline-block">
+                    <img
+                      src={imagePreview}
+                      alt="preview"
+                      className="max-w-xs max-h-40 rounded-lg"
+                    />
+                    <button
+                      onClick={handleRemoveImage}
+                      className="absolute -top-2 -right-2 bg-[#262626] rounded-full p-1 hover:bg-[#363636] cursor-pointer"
+                    >
+                      <X className="w-4 h-4 text-white" />
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              <div className="flex items-center gap-3 px-5 py-3">
+                <input
+                  ref={imageInputRef}
+                  type="file"
+                  accept="image/*"
+                  onChange={handleImageChange}
+                  className="hidden"
+                  disabled={isSending}
+                />
+
+                <button
+                  onClick={handleImageClick}
+                  disabled={isSending}
+                  className="text-[#0095f6] hover:opacity-70 cursor-pointer flex-shrink-0 disabled:opacity-50"
                 >
-                  <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z" />
-                </svg>
-              </button>
+                  <svg
+                    className="w-6 h-6"
+                    fill="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z" />
+                  </svg>
+                </button>
 
-              <input
-                type="text"
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) {
-                    e.preventDefault();
-                    handleSend();
-                  }
-                }}
-                placeholder="Nhập tin nhắn..."
-                disabled={isSending}
-                className="flex-1 bg-[#1a1a1a] rounded-full px-4 py-2 text-sm text-white placeholder:text-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-600 disabled:opacity-60"
-              />
+                <input
+                  type="text"
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.shiftKey) {
+                      e.preventDefault();
+                      handleSend();
+                    }
+                  }}
+                  placeholder="Nhập tin nhắn..."
+                  disabled={isSending}
+                  className="flex-1 bg-[#1a1a1a] rounded-full px-4 py-2 text-sm text-white placeholder:text-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-600 disabled:opacity-60"
+                />
 
-              {input.trim() && (
                 <button
                   onClick={handleSend}
-                  disabled={isSending}
+                  disabled={isSending || (!input.trim() && !selectedImage)}
                   className="text-[#0095f6] text-sm font-semibold hover:opacity-70 cursor-pointer disabled:opacity-50 flex-shrink-0"
                 >
                   Gửi
                 </button>
-              )}
+              </div>
             </div>
           </>
         ) : (
@@ -414,6 +620,7 @@ export default function ChatPage() {
           </div>
         )}
       </div>
+
       <NewMessageModal
         isOpen={newMessageModal}
         onClose={() => setNewMessageModal(false)}

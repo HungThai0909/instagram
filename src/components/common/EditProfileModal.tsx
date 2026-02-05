@@ -69,23 +69,23 @@ export default function EditProfileModal({
   });
 
   useEffect(() => {
-    if (isOpen && profile) {
-      reset({
-        fullName: profile.fullName || "",
-        bio: profile.bio || "",
-        website: profile.website || "",
-        gender: (profile.gender as any) || "male",
-      });
-      setPreviewImage(null);
-      document.body.style.overflow = "hidden";
-    } else {
-      document.body.style.overflow = "unset";
-    }
+    if (!isOpen || !profile) return;
+
+    reset({
+      fullName: profile.fullName || "",
+      bio: profile.bio || "",
+      website: profile.website || "",
+      gender: (profile.gender as any) || "male",
+    });
+
+    setPreviewImage(null);
+
+    document.body.style.overflow = "hidden";
 
     return () => {
       document.body.style.overflow = "unset";
     };
-  }, [isOpen, profile, reset]);
+  }, [isOpen, reset]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -125,9 +125,7 @@ export default function EditProfileModal({
       await axiosInstance.patch("/api/users/profile", formData, {
         headers: { "Content-Type": "multipart/form-data" },
       });
-
-      toast.success("Đã đổi ảnh đại diện");
-      onSuccess();
+      toast.success("Ảnh đã được cập nhật (nhấn Lưu để áp dụng)");
     } catch (error: any) {
       toast.error(error.response?.data?.message || "Không thể tải ảnh lên");
       setPreviewImage(null);
@@ -164,9 +162,9 @@ export default function EditProfileModal({
     <div
       className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60"
       onMouseDown={(e) => {
-    if (e.target !== e.currentTarget) return;
-    onClose();
-  }}
+        if (e.target !== e.currentTarget) return;
+        onClose();
+      }}
     >
       <div
         className="bg-[#262626] rounded-xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col"
@@ -190,11 +188,19 @@ export default function EditProfileModal({
           className="flex-1 overflow-y-auto"
         >
           <div className="flex items-center gap-4 p-6 bg-[#1a1a1a]">
-            <img
-              src={displayImage}
-              alt={profile.username}
-              className="w-16 h-16 rounded-full object-cover"
-            />
+            {displayImage ? (
+              <img
+                src={displayImage}
+                alt={profile.username}
+                className="w-16 h-16 rounded-full object-cover"
+              />
+            ) : (
+              <div className="w-16 h-16 rounded-full bg-white flex items-center justify-center">
+                <span className="text-xl font-semibold text-black uppercase">
+                  {profile.username[0]}
+                </span>
+              </div>
+            )}
 
             <div className="flex-1">
               <p className="font-semibold">{profile.username}</p>

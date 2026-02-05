@@ -32,8 +32,11 @@ const registerSchema = z
       ),
     password: z
       .string()
-      .min(6, "Mật khẩu phải ít nhất 6 ký tự")
-      .regex(/[A-Z]/, "Mật khẩu phải chứa ít nhất 1 chữ viết hoa")
+      .min(8, "Mật khẩu phải ít nhất 8 ký tự")
+      .regex(/[A-Z]/, "Phải có ít nhất 1 chữ hoa")
+      .regex(/[a-z]/, "Phải có ít nhất 1 chữ thường")
+      .regex(/[0-9]/, "Phải có ít nhất 1 chữ số")
+      .regex(/[^A-Za-z0-9]/, "Phải có ít nhất 1 ký tự đặc biệt")
       .trim(),
     confirmPassword: z.string().min(1, "Vui lòng xác nhận mật khẩu").trim(),
   })
@@ -205,12 +208,12 @@ export default function RegisterPage() {
 
           <div className="space-y-4 text-center">
             <p className="text-gray-400 text-sm mt-8">
-              Bạn chưa có tài khoản?{" "}
+              Bạn đã có tài khoản?{" "}
               <Link
                 to="/login"
                 className="text-blue-400 hover:text-blue-300 font-semibold "
               >
-                Đăng ký
+                Đăng nhập
               </Link>
             </p>
           </div>

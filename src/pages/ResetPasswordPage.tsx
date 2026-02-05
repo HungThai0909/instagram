@@ -10,7 +10,14 @@ import { toast } from "sonner";
 
 const resetPasswordSchema = z
   .object({
-    password: z.string().min(6, "Mật khẩu phải ít nhất 6 ký tự"),
+    password: z
+      .string()
+      .min(8, "Mật khẩu phải ít nhất 8 ký tự")
+      .regex(/[A-Z]/, "Phải có ít nhất 1 chữ hoa")
+      .regex(/[a-z]/, "Phải có ít nhất 1 chữ thường")
+      .regex(/[0-9]/, "Phải có ít nhất 1 chữ số")
+      .regex(/[^A-Za-z0-9]/, "Phải có ít nhất 1 ký tự đặc biệt")
+      .trim(),
     confirmPassword: z.string(),
   })
   .refine((data) => data.password === data.confirmPassword, {
