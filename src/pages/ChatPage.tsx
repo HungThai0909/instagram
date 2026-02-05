@@ -35,8 +35,9 @@ interface MessageData {
     profilePicture: string | null;
   };
   recipientId: string;
-  messageType: string;
-  content: string;
+  messageType: "text" | "image";
+  content?: string;
+  imageUrl?: string;
   isRead: boolean;
   createdAt: string;
 }
@@ -630,17 +631,15 @@ export default function ChatPage() {
                                     : "bg-[#262626] text-white rounded-bl-sm"
                                 }`}
                               >
-                                {msg.messageType === "image" && msg.content ? (
+                                {msg.messageType === "image" ? (
                                   <img
                                     src={
-                                      msg.content.startsWith("data:")
-                                        ? msg.content
-                                        : getMediaUrl(msg.content)
+                                      msg.content?.startsWith("data:")
+                                        ? msg.content 
+                                        : getMediaUrl(msg.imageUrl) 
                                     }
                                     className="max-w-full rounded-lg"
                                   />
-                                ) : msg.messageType === "image" ? (
-                                  <div className="w-40 h-32 bg-[#333] animate-pulse rounded-lg" />
                                 ) : (
                                   <p className="text-sm break-words">
                                     {msg.content}
