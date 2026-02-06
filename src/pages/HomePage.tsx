@@ -103,7 +103,7 @@ export default function HomePage() {
                     onClick={() => fetchNextPage()}
                     disabled={isFetchingNextPage}
                     variant="ghost"
-                    className="text-blue-500 hover:text-white"
+                    className="text-blue-500 hover:text-black cursor-pointer"
                   >
                     {isFetchingNextPage ? "Đang tải..." : "Tải thêm"}
                   </Button>
