@@ -38,11 +38,7 @@ export default function LoginPage() {
   }, [location.state, setValue]);
 
   const onSubmit = async (data: LoginInput) => {
-    try {
-      await login(data);
-    } catch (error: any) {
-      toast.error(error.response?.data?.message || "Đăng nhập thất bại");
-    }
+    await login(data);
   };
 
   return (
@@ -68,7 +64,16 @@ export default function LoginPage() {
             </h1>
           </div>
 
-          <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+          <form
+            onSubmit={handleSubmit(onSubmit)}
+            className="space-y-4"
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                handleSubmit(onSubmit)();
+              }
+            }}
+          >
             <div className="space-y-2">
               <Input
                 id="email"
@@ -142,7 +147,7 @@ export default function LoginPage() {
             </p>
 
             <p className="text-gray-400 text-sm mt-8">
-              Bạn chưa có tài khoản?
+              Bạn chưa có tài khoản?{" "}
               <Link
                 to="/register"
                 className="text-blue-400 hover:text-blue-300 font-semibold"

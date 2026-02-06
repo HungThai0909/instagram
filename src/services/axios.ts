@@ -66,8 +66,6 @@ axiosInstance.interceptors.response.use(
       originalRequest.url?.includes("/api/auth/login") ||
       originalRequest.url?.includes("/api/auth/refresh-token")
     ) {
-      useAuthStore.getState().logout();
-      window.location.replace("/login");
       return Promise.reject(error);
     }
 

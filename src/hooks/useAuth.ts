@@ -21,7 +21,9 @@ export function useAuth() {
       const { user, accessToken, refreshToken } = await authService.login(data);
 
       if (!accessToken || !user) {
-        throw new Error("Invalid login response");
+        toast.error("Phản hồi đăng nhập không hợp lệ");
+        setIsLoading(false);
+        return null;
       }
 
       localStorage.setItem("auth_token", accessToken);
@@ -35,10 +37,12 @@ export function useAuth() {
       navigate("/", { replace: true });
 
       return user;
-    } catch (error) {
-      throw error;
-    } finally {
+    } catch (error: any) {
+      const errorMessage =
+        error.response?.data?.message || "Đăng nhập thất bại";
+      toast.error(errorMessage);
       setIsLoading(false);
+      return null;
     }
   };
 
